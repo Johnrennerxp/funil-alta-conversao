@@ -26,7 +26,11 @@ import {
   addAuthorizedUser, 
   removeAuthorizedUser,
   getFunnelMetrics,
-  getFormSubmissions
+  getFormSubmissions,
+  getClientAccounts,
+  createClientAccount,
+  deleteClientAccount,
+  toggleClientStatus
 } from '../services/firebase';
 import { exportSubmissionsToCSV } from '../utils/spreadsheet';
 
@@ -35,8 +39,15 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
   const [metrics, setMetrics] = useState({});
   const [authorizedUsers, setAuthorizedUsers] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+  const [clients, setClients] = useState([]);
   const [selectedFunnelFilter, setSelectedFunnelFilter] = useState('all');
-  const [newEmail, setNewEmail] = useState('');
+  const [newClient, setNewClient] = useState({
+    name: '',
+    email: '',
+    passwordInitial: '',
+    whatsapp: '',
+    plan: 'Plano Pro'
+  });
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
   const [actionMessage, setActionMessage] = useState({ text: '', type: '' });
@@ -49,14 +60,16 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [listFunnels, listUsers, listSubmissions] = await Promise.all([
+      const [listFunnels, listUsers, listSubmissions, listClients] = await Promise.all([
         getFunnels(),
         getAuthorizedUsers(),
-        getFormSubmissions()
+        getFormSubmissions(),
+        getClientAccounts()
       ]);
       setFunnels(listFunnels);
       setAuthorizedUsers(listUsers);
       setSubmissions(listSubmissions);
+      setClients(listClients);
 
       const metricMap = {};
       for (const f of listFunnels) {
@@ -546,110 +559,194 @@ function doPost(e) {
       )}
 
       {/* ======================================================== */}
-      {/* ABA 3: ACESSOS AUTORIZADOS / LICENCIAMENTO               */}
+      {/* ABA 3: GESTÃO DE CLIENTES & VENDA DE ACESSOS (SAAS)      */}
       {/* ======================================================== */}
-      {activeTab === 'users' && (
-        <div className="max-w-2xl mx-auto space-y-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
+      {activeTab === 'clients' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
               <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F]">
-                Gestão de Clientes & Licenças
+                Clientes & Licenças de Acesso
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                Acesso Master Exclusivo
-              </span>
+              <p className="text-xs text-[#86868B] mt-0.5">
+                Crie e gerencie os acessos (e-mail e senha) que você vende para os seus clientes.
+              </p>
             </div>
-            <p className="text-xs text-[#86868B] leading-relaxed">
-              Você é o <strong>Proprietário Master (CPF: ***.***.283-19)</strong>. Ninguém mais tem permissão de revenda. Somente clientes que você cadastrar abaixo conseguem acessar o sistema.
-            </p>
           </div>
 
-          {/* Adicionar E-mail de Cliente */}
-          <div className="apple-card p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B] mb-2">
-              Cadastrar Novo Cliente / Licenciado
+          {/* Formulário de Criação de Novo Cliente para Revenda */}
+          <div className="apple-card p-6 space-y-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B]">
+              Cadastrar Novo Cliente (Gerar Login e Senha)
             </h2>
-            <p className="text-[11px] text-[#86868B] mb-3">
-              Ao adicionar o e-mail abaixo, o cliente ganha permissão para criar e gerenciar formulários sem ter acesso master ao sistema.
-            </p>
-            <form onSubmit={handleAddUser} className="flex gap-2">
-              <input
-                type="email"
-                required
-                placeholder="cliente@empresa.com"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:ring-2 focus:ring-[#0071E3]/20 focus:outline-none transition-all"
-              />
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
-              >
-                Liberar Acesso
-              </button>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newClient.email || !newClient.passwordInitial) return;
+                try {
+                  await createClientAccount(newClient);
+                  setNewClient({
+                    name: '',
+                    email: '',
+                    passwordInitial: '',
+                    whatsapp: '',
+                    plan: 'Plano Pro'
+                  });
+                  showNotification('Cliente cadastrado com sucesso!');
+                  const updated = await getClientAccounts();
+                  setClients(updated);
+                } catch (err) {
+                  showNotification(err.message || 'Erro ao criar cliente.', 'error');
+                }
+              }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
+            >
+              <div>
+                <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">Nome do Cliente</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: João da Silva"
+                  value={newClient.name}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">E-mail de Acesso</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="cliente@empresa.com"
+                  value={newClient.email}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">Senha Inicial</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Cliente@2025"
+                  value={newClient.passwordInitial}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, passwordInitial: e.target.value }))}
+                  className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">Plano / Licença</label>
+                <select
+                  value={newClient.plan}
+                  onChange={(e) => setNewClient(prev => ({ ...prev, plan: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                >
+                  <option value="Plano Mensal">Plano Mensal</option>
+                  <option value="Plano Anual">Plano Anual</option>
+                  <option value="Acesso Vitalício">Acesso Vitalício</option>
+                  <option value="Plano Teste (7 dias)">Plano Teste (7 dias)</option>
+                </select>
+              </div>
+
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full py-2 px-4 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
+                >
+                  Gerar Acesso
+                </button>
+              </div>
             </form>
           </div>
 
-          {/* Lista de Usuários e Clientes */}
+          {/* Lista de Clientes com Botão de Copiar Dados para WhatsApp */}
           <div className="apple-card overflow-hidden">
-            <div className="px-6 py-4 flex items-center justify-between">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-black/[0.04]">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#86868B]">
-                Usuários Autorizados ({authorizedUsers.length})
+                Clientes Cadastrados ({clients.length})
               </h3>
-              <span className="text-[10px] text-[#86868B]">Gestão protegida</span>
             </div>
 
-            <div className="divide-y divide-black/[0.04]">
-              {authorizedUsers.map((item) => {
-                const isCurrentLoggedUser = (item.email || '').toLowerCase() === (user?.email || '').toLowerCase();
-                const isMasterUser = isCurrentLoggedUser && user?.isMaster;
-                return (
-                  <div key={item.email} className="px-6 py-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-black/[0.05] text-[#1D1D1F] flex items-center justify-center font-semibold text-xs">
-                        {(item.email || 'U')[0].toUpperCase()}
-                      </div>
-                      <div>
+            {clients.length === 0 ? (
+              <div className="p-12 text-center text-xs text-[#86868B]">
+                Nenhum cliente cadastrado ainda. Use o formulário acima para gerar o primeiro acesso.
+              </div>
+            ) : (
+              <div className="divide-y divide-black/[0.04]">
+                {clients.map((c) => {
+                  const accessUrl = window.location.origin + window.location.pathname + '#/admin';
+                  const whatsappMessage = `Olá ${c.name}! Segue o seu acesso exclusivo ao sistema de funis:\n\n🔗 Link: ${accessUrl}\n📧 E-mail: ${c.email}\n🔑 Senha: ${c.passwordInitial}\n\nVocê já pode acessar e criar seus formulários!`;
+
+                  return (
+                    <div key={c.id} className="p-5 hover:bg-black/[0.015] transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-[#1D1D1F] font-mono">
-                            {item.email}
+                          <span className="text-sm font-semibold text-[#1D1D1F]">{c.name}</span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            c.status === 'active' ? 'bg-emerald-500/10 text-emerald-800' : 'bg-rose-500/10 text-rose-800'
+                          }`}>
+                            {c.status === 'active' ? 'ATIVO' : 'SUSPENSO'}
                           </span>
-                          {isMasterUser ? (
-                            <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-sans font-bold">
-                              Proprietário Master (Você)
-                            </span>
-                          ) : isCurrentLoggedUser ? (
-                            <span className="text-[10px] bg-black/[0.05] text-[#86868B] px-2 py-0.5 rounded-full font-sans font-medium">
-                              Sua sessão
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-sans font-medium">
-                              Cliente Licenciado
-                            </span>
-                          )}
+                          <span className="text-[10px] bg-black/[0.04] text-[#86868B] px-2 py-0.5 rounded-md">
+                            {c.plan}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-[#86868B] block mt-0.5">
-                          {item.addedBy || 'Cadastrado pelo Master'}
-                        </span>
+
+                        <div className="flex items-center gap-4 text-xs text-[#86868B] font-mono">
+                          <span>Login: <strong className="text-[#1D1D1F]">{c.email}</strong></span>
+                          <span>Senha: <strong className="text-[#1D1D1F]">{c.passwordInitial}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Ações */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(whatsappMessage);
+                            showNotification('Mensagem com dados de acesso copiada para o WhatsApp!');
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#128C7E] rounded-full transition-colors"
+                          title="Copiar mensagem com link, login e senha prontos para enviar ao cliente"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copiar Acesso (WhatsApp)</span>
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            await toggleClientStatus(c.id, c.status);
+                            const updated = await getClientAccounts();
+                            setClients(updated);
+                            showNotification('Status do cliente atualizado.');
+                          }}
+                          className="px-2.5 py-1.5 text-xs text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-lg transition-colors"
+                        >
+                          {c.status === 'active' ? 'Suspender' : 'Reativar'}
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`Excluir o cliente ${c.name}?`)) return;
+                            await deleteClientAccount(c.id, c.email);
+                            const updated = await getClientAccounts();
+                            setClients(updated);
+                            showNotification('Cliente excluído.');
+                          }}
+                          className="p-1.5 text-[#86868B] hover:text-[#FF3B30] hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Excluir cliente"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-
-                    <div>
-                      {isCurrentLoggedUser ? (
-                        <span className="text-[11px] text-[#86868B]">Protegido</span>
-                      ) : (
-                        <button
-                          onClick={() => handleRemoveUser(item.email)}
-                          className="px-2.5 py-1 text-xs text-[#FF3B30] hover:bg-[#FF3B30]/10 rounded-lg transition-colors font-medium"
-                        >
-                          Revogar Acesso
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

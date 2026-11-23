@@ -674,3 +674,104 @@ export async function getFormSubmissions(formId = null) {
   }
 }
 
+// -------------------------------------------------------------
+// GESTÃO DE CLIENTES & VENDA DE ACESSOS (SAAS / REVENDA)
+// -------------------------------------------------------------
+
+const INITIAL_DEMO_CLIENTS = [
+  {
+    id: 'cli_demo_1',
+    name: 'Dr. Lucas Silveira (Advocacia)',
+    email: 'lucas@silveiraadv.com',
+    passwordInitial: 'Adv@2025!',
+    whatsapp: '5511988887777',
+    plan: 'Plano Pro Anual',
+    status: 'active',
+    createdAt: new Date().toISOString()
+  }
+];
+
+export async function createClientAccount(data) {
+  if (!data.email || !data.passwordInitial) {
+    throw new Error('E-mail e senha inicial são obrigatórios.');
+  }
+  const cleanEmail = data.email.toLowerCase().trim();
+
+  const client = {
+    id: 'cli_' + Math.random().toString(36).substring(2, 9),
+    name: data.name || cleanEmail.split('@')[0],
+    email: cleanEmail,
+    passwordInitial: data.passwordInitial,
+    whatsapp: data.whatsapp || '',
+    plan: data.plan || 'Plano Padrão',
+    status: 'active',
+    createdAt: new Date().toISOString()
+  };
+
+  // Garante que o cliente esteja na coleção authorized_users para ter acesso ao painel
+  await addAuthorizedUser(cleanEmail, `Venda para ${client.name}`);
+
+  if (isFirebaseConfigured && db) {
+    try {
+      await setDoc(doc(db, 'client_accounts', client.id), client);
+      return client;
+    } catch (err) {
+      console.warn('Erro ao salvar cliente no Firestore:', err);
+    }
+  } else {
+    const list = getLocalItem('ag_funnels_clients_v1', INITIAL_DEMO_CLIENTS);
+    list.unshift(client);
+    setLocalItem('ag_funnels_clients_v1', list);
+    return client;
+  }
+}
+
+export async function getClientAccounts() {
+  if (isFirebaseConfigured && db) {
+    try {
+      const snap = await getDocs(collection(db, 'client_accounts'));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      return list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } catch (err) {
+      console.warn('Erro ao ler clientes do Firestore:', err);
+      return [];
+    }
+  } else {
+    return getLocalItem('ag_funnels_clients_v1', INITIAL_DEMO_CLIENTS);
+  }
+}
+
+export async function deleteClientAccount(clientId, email) {
+  if (email) {
+    try {
+      await removeAuthorizedUser(email, 'admin');
+    } catch {
+      // Ignorar fallback
+    }
+  }
+
+  if (isFirebaseConfigured && db) {
+    await deleteDoc(doc(db, 'client_accounts', clientId));
+  } else {
+    let list = getLocalItem('ag_funnels_clients_v1', INITIAL_DEMO_CLIENTS);
+    list = list.filter(c => c.id !== clientId);
+    setLocalItem('ag_funnels_clients_v1', list);
+  }
+  return true;
+}
+
+export async function toggleClientStatus(clientId, currentStatus) {
+  const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+
+  if (isFirebaseConfigured && db) {
+    await setDoc(doc(db, 'client_accounts', clientId), { status: newStatus }, { merge: true });
+  } else {
+    const list = getLocalItem('ag_funnels_clients_v1', INITIAL_DEMO_CLIENTS);
+    const item = list.find(c => c.id === clientId);
+    if (item) item.status = newStatus;
+    setLocalItem('ag_funnels_clients_v1', list);
+  }
+  return newStatus;
+}
+
+
