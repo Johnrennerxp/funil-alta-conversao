@@ -20,7 +20,10 @@ import {
   ShieldCheck,
   Eye,
   Key,
-  Lock
+  Lock,
+  Search,
+  X,
+  MessageCircle
 } from 'lucide-react';
 import { 
   getFunnels, 
@@ -65,6 +68,9 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
   const [copiedId, setCopiedId] = useState(null);
   const [actionMessage, setActionMessage] = useState({ text: '', type: '' });
   const [copiedScript, setCopiedScript] = useState(false);
+  const [viewingSubmissionsFunnel, setViewingSubmissionsFunnel] = useState(null);
+  const [submissionSearch, setSubmissionSearch] = useState('');
+  const [subFilter, setSubFilter] = useState('all'); // 'all' | 'qualified' | 'disqualified'
 
   useEffect(() => {
     loadDashboardData();
@@ -436,16 +442,31 @@ function doPost(e) {
                           <span className="text-[10px] text-[#86868B]">Conversão</span>
                         </div>
 
-                        {/* Botão Baixar Planilha Direto */}
+                        {/* Botões de Respostas na Tela & Planilha */}
                         {canViewSubmissions && (
-                          <button
-                            onClick={() => handleExportSpreadsheet(funnel.id, funnel.design?.headline)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full transition-colors"
-                            title="Baixar planilha de respostas deste formulário (CSV / Excel)"
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            <span>Planilha ({subCount})</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setViewingSubmissionsFunnel(funnel);
+                                setSubmissionSearch('');
+                                setSubFilter('all');
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#0071E3] bg-[#0071E3]/10 hover:bg-[#0071E3]/20 rounded-full transition-colors shadow-sm"
+                              title="Ver respostas e dados dos leads na tela sem precisar baixar planilha"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Ver Respostas ({subCount})</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleExportSpreadsheet(funnel.id, funnel.design?.headline)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full transition-colors"
+                              title="Baixar planilha CSV / Excel deste formulário"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>CSV</span>
+                            </button>
+                          </div>
                         )}
 
                         {/* Ações */}
@@ -1121,6 +1142,157 @@ function doPost(e) {
             <p className="text-xs text-[#86868B] leading-relaxed">
               No Google Cloud Console, a chave de API pode ser restrita apenas ao domínio do seu GitHub Pages e localhost.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL VER RESPOSTAS NA TELA (SEM BAIXAR PLANILHA) */}
+      {viewingSubmissionsFunnel && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white max-w-4xl w-full rounded-3xl shadow-2xl p-6 space-y-4 max-h-[90vh] flex flex-col">
+            
+            {/* Header do Modal */}
+            <div className="flex items-center justify-between border-b border-black/[0.05] pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-[#1D1D1F]">
+                    {viewingSubmissionsFunnel.design?.headline || viewingSubmissionsFunnel.slug}
+                  </h3>
+                  <span className="text-[10px] bg-black/[0.04] text-[#86868B] px-2 py-0.5 rounded-full font-mono">
+                    /{viewingSubmissionsFunnel.slug}
+                  </span>
+                </div>
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  Visualização de respostas em tempo real diretamente na tela.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExportSpreadsheet(viewingSubmissionsFunnel.id, viewingSubmissionsFunnel.design?.headline)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 rounded-full transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Baixar Planilha CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setViewingSubmissionsFunnel(null)}
+                  className="p-1.5 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.05] rounded-full transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Barra de Filtros e Busca */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center apple-segmented-bg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSubFilter('all')}
+                  className={`px-3 py-1 text-xs apple-segmented-item ${subFilter === 'all' ? 'apple-segmented-item-active' : 'text-[#86868B]'}`}
+                >
+                  Todas ({submissions.filter(s => s.formId === viewingSubmissionsFunnel.id).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubFilter('qualified')}
+                  className={`px-3 py-1 text-xs apple-segmented-item ${subFilter === 'qualified' ? 'apple-segmented-item-active' : 'text-[#86868B]'}`}
+                >
+                  Qualificados ({submissions.filter(s => s.formId === viewingSubmissionsFunnel.id && s.status === 'qualified').length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubFilter('disqualified')}
+                  className={`px-3 py-1 text-xs apple-segmented-item ${subFilter === 'disqualified' ? 'apple-segmented-item-active' : 'text-[#86868B]'}`}
+                >
+                  Desqualificados ({submissions.filter(s => s.formId === viewingSubmissionsFunnel.id && s.status === 'disqualified').length})
+                </button>
+              </div>
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-[#86868B] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar nas respostas..."
+                  value={submissionSearch}
+                  onChange={(e) => setSubmissionSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1 text-xs rounded-full bg-black/[0.04] text-[#1D1D1F] focus:bg-white focus:outline-none w-48 sm:w-56"
+                />
+              </div>
+            </div>
+
+            {/* Lista com Rolagem */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {(() => {
+                const funnelSubs = submissions
+                  .filter(s => s.formId === viewingSubmissionsFunnel.id)
+                  .filter(s => subFilter === 'all' ? true : s.status === subFilter)
+                  .filter(s => {
+                    if (!submissionSearch.trim()) return true;
+                    const search = submissionSearch.toLowerCase();
+                    return (s.answers || []).some(a => 
+                      (a.question && a.question.toLowerCase().includes(search)) ||
+                      (a.answer && String(a.answer).toLowerCase().includes(search))
+                    );
+                  });
+
+                if (funnelSubs.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-xs text-[#86868B]">
+                      Nenhuma resposta encontrada para os filtros selecionados.
+                    </div>
+                  );
+                }
+
+                return funnelSubs.map((sub, sIdx) => {
+                  return (
+                    <div key={sub.id || sIdx} className="p-4 rounded-2xl bg-black/[0.025] space-y-3 border border-black/[0.03]">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            sub.status === 'qualified'
+                              ? 'bg-emerald-500/10 text-emerald-800'
+                              : 'bg-amber-500/10 text-amber-800'
+                          }`}>
+                            {sub.status === 'qualified' ? 'QUALIFICADO' : 'DESQUALIFICADO'}
+                          </span>
+                          <span className="text-[11px] text-[#86868B] flex items-center gap-1 font-mono">
+                            <Calendar className="w-3 h-3" />
+                            {sub.submittedAt ? new Date(sub.submittedAt).toLocaleString('pt-BR') : '-'}
+                          </span>
+                        </div>
+
+                        {sub.tracking && (sub.tracking.utm_source || sub.tracking.utm_campaign) && (
+                          <div className="text-[10px] text-[#86868B] font-mono">
+                            <span>Origem: <strong className="text-[#1D1D1F]">{sub.tracking.utm_source || 'Direto'}</strong></span>
+                            {sub.tracking.utm_campaign && <span> • Campanha: {sub.tracking.utm_campaign}</span>}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Respostas em Cards Apple */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                        {(sub.answers || []).map((ans, aIdx) => (
+                          <div key={aIdx} className="p-3 rounded-xl bg-white shadow-sm space-y-1">
+                            <span className="text-[10px] font-semibold text-[#86868B] block truncate">
+                              {ans.question}
+                            </span>
+                            <span className="font-medium text-[#1D1D1F] block text-xs break-words">
+                              {Array.isArray(ans.answer) ? ans.answer.join(', ') : ans.answer}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
           </div>
         </div>
       )}

@@ -1,14 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import AdminDashboard from './pages/AdminDashboard';
-import FunnelEditor from './pages/FunnelEditor';
-import AdminLogin from './pages/AdminLogin';
-import PublicFunnel from './pages/PublicFunnel';
 import { subscribeToAuth } from './services/firebase';
 
+const PublicFunnel = lazy(() => import('./pages/PublicFunnel'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const FunnelEditor = lazy(() => import('./pages/FunnelEditor'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const Navbar = lazy(() => import('./components/Navbar'));
+
+function FallbackLoader() {
+  return (
+    <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center text-xs text-[#86868B]">
+      <div className="flex flex-col items-center gap-2">
+        <div className="w-5 h-5 border-2 border-[#0071E3] border-t-transparent rounded-full animate-spin"></div>
+        <span>Carregando...</span>
+      </div>
+    </div>
+  );
+}
+
 function AdminWrapper() {
-  const [activeTab, setActiveTab] = useState('funnels'); // 'funnels' | 'users' | 'security'
+  const [activeTab, setActiveTab] = useState('funnels');
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [editingFunnelId, setEditingFunnelId] = useState(null);
@@ -31,35 +43,43 @@ function AdminWrapper() {
   }
 
   if (!user) {
-    return <AdminLogin onLoginSuccess={(u) => setUser(u)} />;
+    return (
+      <Suspense fallback={<FallbackLoader />}>
+        <AdminLogin onLoginSuccess={(u) => setUser(u)} />
+      </Suspense>
+    );
   }
 
   if (editingFunnelId || isCreatingNew) {
     return (
-      <FunnelEditor
-        funnelId={editingFunnelId}
-        onBack={() => {
-          setEditingFunnelId(null);
-          setIsCreatingNew(false);
-        }}
-      />
+      <Suspense fallback={<FallbackLoader />}>
+        <FunnelEditor
+          funnelId={editingFunnelId}
+          onBack={() => {
+            setEditingFunnelId(null);
+            setIsCreatingNew(false);
+          }}
+        />
+      </Suspense>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#F5F5F7]">
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        user={user}
-        onLoginClick={() => {}}
-      />
-      <AdminDashboard
-        activeTab={activeTab}
-        user={user}
-        onEditFunnel={(id) => setEditingFunnelId(id)}
-        onCreateNew={() => setIsCreatingNew(true)}
-      />
+      <Suspense fallback={<FallbackLoader />}>
+        <Navbar
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          user={user}
+          onLoginClick={() => {}}
+        />
+        <AdminDashboard
+          activeTab={activeTab}
+          user={user}
+          onEditFunnel={(id) => setEditingFunnelId(id)}
+          onCreateNew={() => setIsCreatingNew(true)}
+        />
+      </Suspense>
     </div>
   );
 }
@@ -67,12 +87,14 @@ function AdminWrapper() {
 export default function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/f/:slug" element={<PublicFunnel />} />
-        <Route path="/admin/*" element={<AdminWrapper />} />
-        <Route path="/" element={<Navigate to="/admin" replace />} />
-        <Route path="*" element={<Navigate to="/admin" replace />} />
-      </Routes>
+      <Suspense fallback={<FallbackLoader />}>
+        <Routes>
+          <Route path="/f/:slug" element={<PublicFunnel />} />
+          <Route path="/admin/*" element={<AdminWrapper />} />
+          <Route path="/" element={<Navigate to="/admin" replace />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

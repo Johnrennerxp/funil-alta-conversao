@@ -8,7 +8,6 @@ import {
   MessageCircle, 
   Lock
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { getFunnelBySlug, logAnalyticsEvent, saveFormSubmission } from '../services/firebase';
 import { getTrackingParams } from '../utils/utm';
 import { trackPixelPageView, trackPixelLead } from '../utils/pixel';
@@ -207,11 +206,14 @@ export default function PublicFunnel() {
     const trackingParams = getTrackingParams();
 
     try {
-      confetti({
-        particleCount: 80,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
+      import('canvas-confetti').then((m) => {
+        const confetti = m.default;
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.6 }
+        });
+      }).catch(() => {});
     } catch {
       // Ignora erro de confetti
     }
