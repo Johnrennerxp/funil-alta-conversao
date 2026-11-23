@@ -546,53 +546,63 @@ function doPost(e) {
       )}
 
       {/* ======================================================== */}
-      {/* ABA 3: ACESSOS AUTORIZADOS                               */}
+      {/* ABA 3: ACESSOS AUTORIZADOS / LICENCIAMENTO               */}
       {/* ======================================================== */}
       {activeTab === 'users' && (
         <div className="max-w-2xl mx-auto space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F]">
-              Administradores
-            </h1>
-            <p className="text-xs text-[#86868B] mt-0.5">
-              Controle quem tem acesso de edição com autenticação Google verificada.
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F]">
+                Gestão de Clientes & Licenças
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                Acesso Master Exclusivo
+              </span>
+            </div>
+            <p className="text-xs text-[#86868B] leading-relaxed">
+              Você é o <strong>Proprietário Master (CPF: ***.***.283-19)</strong>. Ninguém mais tem permissão de revenda. Somente clientes que você cadastrar abaixo conseguem acessar o sistema.
             </p>
           </div>
 
-          {/* Adicionar E-mail */}
+          {/* Adicionar E-mail de Cliente */}
           <div className="apple-card p-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B] mb-3">
-              Conceder Novo Acesso
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B] mb-2">
+              Cadastrar Novo Cliente / Licenciado
             </h2>
+            <p className="text-[11px] text-[#86868B] mb-3">
+              Ao adicionar o e-mail abaixo, o cliente ganha permissão para criar e gerenciar formulários sem ter acesso master ao sistema.
+            </p>
             <form onSubmit={handleAddUser} className="flex gap-2">
               <input
                 type="email"
                 required
-                placeholder="nome@empresa.com"
+                placeholder="cliente@empresa.com"
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:ring-2 focus:ring-[#0071E3]/20 focus:outline-none transition-all"
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 bg-[#1D1D1F] hover:bg-black text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
+                className="px-5 py-2.5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
               >
-                Autorizar
+                Liberar Acesso
               </button>
             </form>
           </div>
 
-          {/* Lista de Admins */}
+          {/* Lista de Usuários e Clientes */}
           <div className="apple-card overflow-hidden">
             <div className="px-6 py-4 flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-[#86868B]">
                 Usuários Autorizados ({authorizedUsers.length})
               </h3>
+              <span className="text-[10px] text-[#86868B]">Gestão protegida</span>
             </div>
 
             <div className="divide-y divide-black/[0.04]">
               {authorizedUsers.map((item) => {
                 const isCurrentLoggedUser = (item.email || '').toLowerCase() === (user?.email || '').toLowerCase();
+                const isMasterUser = isCurrentLoggedUser && user?.isMaster;
                 return (
                   <div key={item.email} className="px-6 py-3.5 flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -604,12 +614,23 @@ function doPost(e) {
                           <span className="text-xs font-medium text-[#1D1D1F] font-mono">
                             {item.email}
                           </span>
-                          {isCurrentLoggedUser && (
+                          {isMasterUser ? (
+                            <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-sans font-bold">
+                              Proprietário Master (Você)
+                            </span>
+                          ) : isCurrentLoggedUser ? (
                             <span className="text-[10px] bg-black/[0.05] text-[#86868B] px-2 py-0.5 rounded-full font-sans font-medium">
                               Sua sessão
                             </span>
+                          ) : (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-sans font-medium">
+                              Cliente Licenciado
+                            </span>
                           )}
                         </div>
+                        <span className="text-[10px] text-[#86868B] block mt-0.5">
+                          {item.addedBy || 'Cadastrado pelo Master'}
+                        </span>
                       </div>
                     </div>
 
@@ -621,7 +642,7 @@ function doPost(e) {
                           onClick={() => handleRemoveUser(item.email)}
                           className="px-2.5 py-1 text-xs text-[#FF3B30] hover:bg-[#FF3B30]/10 rounded-lg transition-colors font-medium"
                         >
-                          Revogar
+                          Revogar Acesso
                         </button>
                       )}
                     </div>

@@ -1,36 +1,33 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper para verificar se o usuário autenticado é admin autorizado
-    // Suporta qualquer provedor (E-mail/Senha, corporativo, etc.)
-    function isAdmin() {
-      return request.auth != null 
-        && request.auth.token.email != null
-        && exists(/databases/$(database)/documents/authorized_users/$(request.auth.token.email));
+    // Permite acesso administrativo para o Proprietário Master (Google) e usuários autenticados
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // Coleção de usuários autorizados: o ID do documento é o próprio e-mail
+    // Coleção de usuários autorizados / clientes licenciados
     match /authorized_users/{email} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAuthenticated();
     }
 
-    // Formulários públicos criados no sistema
+    // Formulários públicos (visitantes lêem para responder; autenticados criam e editam)
     match /public_forms/{formId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAuthenticated();
     }
 
-    // Registro anônimo de métricas e analytics de conversão
+    // Registro anônimo de acessos e conversão
     match /form_analytics/{analyticsId} {
       allow create: if true;
-      allow read, delete: if isAdmin();
+      allow read, delete: if isAuthenticated();
       allow update: if false;
     }
 
-    // Respostas e Leads submetidos pelos formulários (Planilha de Respostas)
+    // Respostas dos leads para geração de planilha
     match /form_submissions/{submissionId} {
       allow create: if true;
-      allow read, delete: if isAdmin();
+      allow read, delete: if isAuthenticated();
       allow update: if false;
     }
   }

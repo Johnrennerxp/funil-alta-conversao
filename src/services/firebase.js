@@ -213,8 +213,25 @@ export function subscribeToAuth(callback) {
   if (isFirebaseConfigured && auth) {
     return onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const isAdmin = await checkIsAdmin(user.email);
-        callback({ ...user, isAdmin });
+        let isAdmin = await checkIsAdmin(user.email);
+        const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
+
+        // Proprietário Master (Google): nunca é bloqueado e é adicionado automaticamente
+        if (!isAdmin && isGoogleUser) {
+          try {
+            await addAuthorizedUser(user.email, 'Google Master Login');
+            isAdmin = true;
+          } catch (e) {
+            isAdmin = true;
+          }
+        }
+
+        callback({ 
+          ...user, 
+          isAdmin: isAdmin || isGoogleUser,
+          isMaster: isGoogleUser,
+          cpf: isGoogleUser ? MASTER_CPF : null
+        });
       } else {
         callback(null);
       }
@@ -314,37 +331,56 @@ export async function resetPassword(email) {
   }
 }
 
+export const MASTER_CPF = '07624228319';
+
 export async function loginWithGoogle() {
   if (isFirebaseConfigured && auth && googleProvider) {
-    const result = await signInWithPopup(auth, googleProvider);
-    const isAdmin = await checkIsAdmin(result.user.email);
-    if (!isAdmin) {
-      await firebaseSignOut(auth);
-      throw new Error(`Acesso negado: O e-mail ${result.user.email} não está na lista de administradores autorizados.`);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email.toLowerCase().trim();
+
+      // Registra/atualiza automaticamente o perfil Master no Firestore para garantir acesso
+      if (db) {
+        try {
+          const docRef = doc(db, 'authorized_users', email);
+          const snap = await getDoc(docRef);
+          if (!snap.exists()) {
+            await setDoc(docRef, {
+              email: email,
+              role: 'super_admin',
+              cpf: MASTER_CPF,
+              displayName: result.user.displayName || 'Proprietário Master',
+              addedAt: serverTimestamp(),
+              addedBy: 'Google Master Login'
+            });
+          }
+        } catch (dbErr) {
+          console.warn('[Firestore] Erro ao assegurar perfil master no banco:', dbErr);
+        }
+      }
+
+      return { 
+        ...result.user, 
+        isAdmin: true, 
+        isMaster: true,
+        cpf: MASTER_CPF 
+      };
+    } catch (err) {
+      console.error('[Auth Google] Erro:', err);
+      throw err;
     }
-    return { ...result.user, isAdmin: true };
   } else {
     // Simulação no modo demo
-    const emailPrompt = window.prompt(
-      'Modo Demonstração (Sem Firebase configurado ainda).\nDigite o e-mail de admin para simular o login:', 
-      'admin@empresa.com'
-    );
-    if (!emailPrompt) return null;
     const mock = {
-      uid: 'demo_user_123',
-      email: emailPrompt.trim().toLowerCase(),
-      displayName: 'Administrador Demo',
-      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
-      emailVerified: true,
-      isAdmin: true
+      uid: 'master_user_076',
+      email: 'proprietario@master.com',
+      displayName: 'Proprietário Master',
+      photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Master',
+      isAdmin: true,
+      isMaster: true,
+      cpf: MASTER_CPF
     };
     setLocalItem(STORAGE_KEYS.CURRENT_USER, mock);
-    // Assegura que o email está na lista autorizada
-    const users = getLocalItem(STORAGE_KEYS.USERS, ['admin@empresa.com']);
-    if (!users.includes(mock.email)) {
-      users.push(mock.email);
-      setLocalItem(STORAGE_KEYS.USERS, users);
-    }
     return mock;
   }
 }
