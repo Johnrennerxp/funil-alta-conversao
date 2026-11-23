@@ -71,6 +71,7 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
   const [viewingSubmissionsFunnel, setViewingSubmissionsFunnel] = useState(null);
   const [submissionSearch, setSubmissionSearch] = useState('');
   const [subFilter, setSubFilter] = useState('all'); // 'all' | 'qualified' | 'disqualified'
+  const [createdUserCredentials, setCreatedUserCredentials] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -162,7 +163,7 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
     e.preventDefault();
     if (!newUser.email.trim()) return;
     try {
-      await addAuthorizedUser(
+      const res = await addAuthorizedUser(
         newUser.email.trim(),
         {
           canViewFunnels: newUser.canViewFunnels,
@@ -173,6 +174,11 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
         newUser.name.trim(),
         user?.email || 'admin'
       );
+      setCreatedUserCredentials({
+        name: newUser.name.trim() || newUser.email.trim().split('@')[0],
+        email: newUser.email.trim(),
+        temporaryPassword: res.temporaryPassword
+      });
       setNewUser({
         name: '',
         email: '',
@@ -181,7 +187,7 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
         canEditFunnels: true,
         canViewSubmissions: true
       });
-      showNotification(`Usuário ${newUser.email.trim()} adicionado com permissões definidas.`);
+      showNotification(`Usuário criado com senha automática!`);
       const updated = await getAuthorizedUsers();
       setAuthorizedUsers(updated);
     } catch (err) {
@@ -857,6 +863,52 @@ function doPost(e) {
             </div>
           </div>
 
+          {/* Card com as Credenciais Geradas e Mensagem Pronta de WhatsApp */}
+          {createdUserCredentials && (
+            <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Key className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-bold text-emerald-950">
+                    Acesso Gerado com Senha Automática!
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreatedUserCredentials(null)}
+                  className="text-emerald-700 hover:text-emerald-950 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono bg-white p-3 rounded-xl border border-emerald-500/15">
+                <div>E-mail: <strong>{createdUserCredentials.email}</strong></div>
+                <div>Senha Temporária: <strong className="text-emerald-700">{createdUserCredentials.temporaryPassword}</strong></div>
+              </div>
+
+              <p className="text-[11px] text-emerald-800 leading-tight">
+                🔒 <strong>Segurança de Primeiro Acesso:</strong> No primeiro login, o sistema exigirá obrigatoriamente que o usuário cadastre sua senha pessoal definitiva.
+              </p>
+
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const accessUrl = window.location.origin + window.location.pathname + '#/admin';
+                    const msg = `Olá ${createdUserCredentials.name}! Segue o seu acesso exclusivo ao LeadFunnel:\n\n🔗 Link: ${accessUrl}\n📧 E-mail: ${createdUserCredentials.email}\n🔑 Senha temporária: ${createdUserCredentials.temporaryPassword}\n\n⚠️ No seu primeiro acesso, o sistema solicitará que você defina sua senha definitiva.`;
+                    navigator.clipboard.writeText(msg);
+                    showNotification('Mensagem copiada para enviar no WhatsApp!');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-[#25D366] text-white rounded-full shadow-sm hover:bg-[#20ba5a] transition-all"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar Acesso para WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Card: Cadastrar Novo Usuário com Permissões */}
           <div className="apple-card p-6 space-y-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B] flex items-center gap-1.5">
@@ -1016,13 +1068,29 @@ function doPost(e) {
                   return (
                     <div key={u.email} className="p-5 hover:bg-black/[0.015] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-[#1D1D1F]">{u.name || u.email.split('@')[0]}</span>
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/[0.05] text-[#86868B]">
                             {u.role || 'Membro'}
                           </span>
+                          {u.mustChangePassword ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-800 tracking-wide">
+                              PRIMEIRO ACESSO PENDENTE
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-800 tracking-wide">
+                              SENHA ATIVA
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-[#86868B] font-mono">{u.email}</p>
+                        <div className="flex items-center gap-3 text-xs text-[#86868B] font-mono">
+                          <span>{u.email}</span>
+                          {u.temporaryPassword && (
+                            <span className="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
+                              Senha provisória: <strong>{u.temporaryPassword}</strong>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Permissões Interativas (Clique para Alternar) */}

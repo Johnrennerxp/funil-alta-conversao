@@ -4,6 +4,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  updatePassword,
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut as firebaseSignOut,
@@ -17,6 +18,7 @@ import {
   getDocs, 
   setDoc, 
   addDoc, 
+  updateDoc,
   deleteDoc, 
   query, 
   where, 
@@ -240,12 +242,19 @@ export function subscribeToAuth(callback) {
           canEditFunnels: true,
           canViewSubmissions: true
         };
+        let mustChangePassword = false;
 
         if (db && !isMaster) {
           try {
             const userDoc = await getDoc(doc(db, 'authorized_users', user.email.toLowerCase().trim()));
-            if (userDoc.exists() && userDoc.data().permissions) {
-              userPermissions = userDoc.data().permissions;
+            if (userDoc.exists()) {
+              const uData = userDoc.data();
+              if (uData.permissions) {
+                userPermissions = uData.permissions;
+              }
+              if (uData.mustChangePassword === true) {
+                mustChangePassword = true;
+              }
             }
           } catch (e) {
             console.warn('Erro ao carregar permissões do usuário:', e);
@@ -257,7 +266,8 @@ export function subscribeToAuth(callback) {
           isAdmin: isAdmin || isMaster,
           isMaster: isMaster,
           cpf: isMaster ? MASTER_CPF : null,
-          permissions: userPermissions
+          permissions: userPermissions,
+          mustChangePassword
         });
       } else {
         callback(null);
@@ -271,36 +281,89 @@ export function subscribeToAuth(callback) {
   }
 }
 
+export function generateTemporaryPassword() {
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+  let rand = '';
+  for (let i = 0; i < 4; i++) {
+    rand += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `Lead@${rand}`;
+}
+
 export async function loginWithEmail(email, password) {
   if (!email || !password) throw new Error('E-mail e senha são obrigatórios.');
   const cleanEmail = email.toLowerCase().trim();
 
   if (isFirebaseConfigured && auth) {
+    let authUser = null;
+    let mustChangePassword = false;
+
     try {
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
-      const isAdmin = await checkIsAdmin(cred.user.email);
-      if (!isAdmin) {
-        await firebaseSignOut(auth);
-        throw new Error(`Acesso negado: O e-mail ${cleanEmail} não está cadastrado na lista de administradores autorizados.`);
-      }
-      return { ...cred.user, isAdmin: true };
+      authUser = cred.user;
     } catch (err) {
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        throw new Error('E-mail ou senha incorretos.');
+      // Se não autenticou no Firebase Auth, checa se é usuário com temporaryPassword salvo no Firestore
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        if (db) {
+          try {
+            const userDoc = await getDoc(doc(db, 'authorized_users', cleanEmail));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              if (data.temporaryPassword && data.temporaryPassword === password) {
+                // Cria a credencial no Firebase Auth com essa senha
+                const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+                authUser = newCred.user;
+                mustChangePassword = true;
+              }
+            }
+          } catch (createErr) {
+            console.warn('Erro ao verificar senha temporária:', createErr);
+          }
+        }
       }
-      if (err.code === 'auth/too-many-requests') {
-        throw new Error('Muitas tentativas sem sucesso. Aguarde alguns minutos ou redefina a senha.');
+
+      if (!authUser) {
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+          throw new Error('E-mail ou senha incorretos.');
+        }
+        if (err.code === 'auth/too-many-requests') {
+          throw new Error('Muitas tentativas sem sucesso. Aguarde alguns minutos ou redefina a senha.');
+        }
+        throw err;
       }
-      throw err;
     }
+
+    const isAdmin = await checkIsAdmin(authUser.email);
+    if (!isAdmin) {
+      await firebaseSignOut(auth);
+      throw new Error(`Acesso negado: O e-mail ${cleanEmail} não está cadastrado na lista de administradores autorizados.`);
+    }
+
+    if (db) {
+      try {
+        const uDoc = await getDoc(doc(db, 'authorized_users', cleanEmail));
+        if (uDoc.exists()) {
+          mustChangePassword = uDoc.data().mustChangePassword === true;
+        }
+      } catch (e) {
+        console.warn('Erro ao verificar flag mustChangePassword:', e);
+      }
+    }
+
+    return { ...authUser, isAdmin: true, mustChangePassword };
   } else {
     // Modo Demonstração Local
+    const localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
+    const found = localUsers.find(u => u.email === cleanEmail);
+    const mustChange = found ? found.mustChangePassword === true : false;
+
     const mock = {
       uid: 'demo_user_123',
       email: cleanEmail,
       displayName: cleanEmail.split('@')[0],
       photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-      isAdmin: true
+      isAdmin: true,
+      mustChangePassword: mustChange
     };
     setLocalItem(STORAGE_KEYS.CURRENT_USER, mock);
     const users = getLocalItem(STORAGE_KEYS.USERS, ['admin@empresa.com']);
@@ -309,6 +372,40 @@ export async function loginWithEmail(email, password) {
       setLocalItem(STORAGE_KEYS.USERS, users);
     }
     return mock;
+  }
+}
+
+export async function changeUserPassword(newPassword) {
+  if (!newPassword || newPassword.length < 6) {
+    throw new Error('A nova senha deve ter no mínimo 6 caracteres.');
+  }
+
+  if (isFirebaseConfigured && auth && auth.currentUser) {
+    await updatePassword(auth.currentUser, newPassword);
+    const email = auth.currentUser.email.toLowerCase().trim();
+    if (db) {
+      try {
+        await updateDoc(doc(db, 'authorized_users', email), {
+          mustChangePassword: false,
+          temporaryPassword: null,
+          passwordChangedAt: serverTimestamp()
+        });
+      } catch (e) {
+        console.warn('Erro ao atualizar flag de troca de senha no Firestore:', e);
+      }
+    }
+    return true;
+  } else {
+    // Modo Demonstração Local
+    const cur = getLocalItem(STORAGE_KEYS.CURRENT_USER, null);
+    if (cur) {
+      cur.mustChangePassword = false;
+      setLocalItem(STORAGE_KEYS.CURRENT_USER, cur);
+    }
+    let localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
+    localUsers = localUsers.map(u => u.email === cur?.email ? { ...u, mustChangePassword: false, temporaryPassword: null } : u);
+    setLocalItem('ag_authorized_users_detail_v1', localUsers);
+    return true;
   }
 }
 
@@ -448,6 +545,8 @@ export async function getAuthorizedUsers() {
         email: d.id,
         name: data.name || (d.id === 'johnrenneradm@gmail.com' ? 'Proprietário Master' : d.id.split('@')[0]),
         role: data.role || (d.id === 'johnrenneradm@gmail.com' ? 'super_admin' : 'user'),
+        temporaryPassword: data.temporaryPassword || null,
+        mustChangePassword: data.mustChangePassword === true,
         permissions: data.permissions || {
           canViewFunnels: true,
           canCreateFunnels: true,
@@ -476,9 +575,10 @@ export async function getAuthorizedUsers() {
   }
 }
 
-export async function addAuthorizedUser(email, permissions = null, name = '', currentUserEmail = 'admin') {
+export async function addAuthorizedUser(email, permissions = null, name = '', currentUserEmail = 'admin', customPassword = null) {
   if (!email) throw new Error('E-mail obrigatório');
   const cleanEmail = email.toLowerCase().trim();
+  const tempPassword = customPassword || generateTemporaryPassword();
 
   const userPerms = permissions || {
     canViewFunnels: true,
@@ -492,6 +592,8 @@ export async function addAuthorizedUser(email, permissions = null, name = '', cu
       email: cleanEmail,
       name: name.trim() || cleanEmail.split('@')[0],
       role: 'user',
+      temporaryPassword: tempPassword,
+      mustChangePassword: true,
       permissions: userPerms,
       addedAt: serverTimestamp(),
       addedBy: currentUserEmail
@@ -502,8 +604,20 @@ export async function addAuthorizedUser(email, permissions = null, name = '', cu
       users.push(cleanEmail);
       setLocalItem(STORAGE_KEYS.USERS, users);
     }
+    let localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
+    localUsers = localUsers.filter(u => u.email !== cleanEmail);
+    localUsers.push({
+      email: cleanEmail,
+      name: name.trim() || cleanEmail.split('@')[0],
+      temporaryPassword: tempPassword,
+      mustChangePassword: true,
+      permissions: userPerms,
+      addedAt: new Date().toISOString(),
+      addedBy: currentUserEmail
+    });
+    setLocalItem('ag_authorized_users_detail_v1', localUsers);
   }
-  return true;
+  return { email: cleanEmail, temporaryPassword: tempPassword };
 }
 
 export async function updateUserPermissions(email, permissions) {
