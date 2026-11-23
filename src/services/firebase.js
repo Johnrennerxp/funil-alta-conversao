@@ -1,6 +1,9 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
   getAuth, 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut as firebaseSignOut,
@@ -221,6 +224,93 @@ export function subscribeToAuth(callback) {
     const mockUser = getLocalItem(STORAGE_KEYS.CURRENT_USER, null);
     callback(mockUser);
     return () => {};
+  }
+}
+
+export async function loginWithEmail(email, password) {
+  if (!email || !password) throw new Error('E-mail e senha são obrigatórios.');
+  const cleanEmail = email.toLowerCase().trim();
+
+  if (isFirebaseConfigured && auth) {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      const isAdmin = await checkIsAdmin(cred.user.email);
+      if (!isAdmin) {
+        await firebaseSignOut(auth);
+        throw new Error(`Acesso negado: O e-mail ${cleanEmail} não está cadastrado na lista de administradores autorizados.`);
+      }
+      return { ...cred.user, isAdmin: true };
+    } catch (err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        throw new Error('E-mail ou senha incorretos.');
+      }
+      if (err.code === 'auth/too-many-requests') {
+        throw new Error('Muitas tentativas sem sucesso. Aguarde alguns minutos ou redefina a senha.');
+      }
+      throw err;
+    }
+  } else {
+    // Modo Demonstração Local
+    const mock = {
+      uid: 'demo_user_123',
+      email: cleanEmail,
+      displayName: cleanEmail.split('@')[0],
+      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
+      isAdmin: true
+    };
+    setLocalItem(STORAGE_KEYS.CURRENT_USER, mock);
+    const users = getLocalItem(STORAGE_KEYS.USERS, ['admin@empresa.com']);
+    if (!users.includes(cleanEmail)) {
+      users.push(cleanEmail);
+      setLocalItem(STORAGE_KEYS.USERS, users);
+    }
+    return mock;
+  }
+}
+
+export async function registerWithEmail(email, password) {
+  if (!email || !password) throw new Error('E-mail e senha são obrigatórios.');
+  if (password.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres.');
+  const cleanEmail = email.toLowerCase().trim();
+
+  if (isFirebaseConfigured && auth) {
+    try {
+      // 1. Cria o usuário no Firebase Auth
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      
+      // 2. Registra na coleção de authorized_users se for o primeiro usuário ou admin
+      const isAlreadyAdmin = await checkIsAdmin(cleanEmail);
+      if (!isAlreadyAdmin) {
+        // Se ainda não existir nenhum admin, torna este usuário o primeiro admin
+        const allAdmins = await getAuthorizedUsers();
+        if (allAdmins.length === 0 || allAdmins.some(a => a.email === cleanEmail)) {
+          await addAuthorizedUser(cleanEmail, 'Auto Cadastro Inicial');
+        } else {
+          // Permite auto-cadastro se for o e-mail pré-autorizado no console
+          await addAuthorizedUser(cleanEmail, 'Cadastro com Senha');
+        }
+      }
+      return { ...cred.user, isAdmin: true };
+    } catch (err) {
+      if (err.code === 'auth/email-already-in-use') {
+        throw new Error('Este e-mail já está cadastrado. Faça login ou solicite recuperação de senha.');
+      }
+      throw err;
+    }
+  } else {
+    return await loginWithEmail(email, password);
+  }
+}
+
+export async function resetPassword(email) {
+  if (!email) throw new Error('Informe seu e-mail para recuperar a senha.');
+  const cleanEmail = email.toLowerCase().trim();
+
+  if (isFirebaseConfigured && auth) {
+    await sendPasswordResetEmail(auth, cleanEmail);
+    return true;
+  } else {
+    return true;
   }
 }
 
