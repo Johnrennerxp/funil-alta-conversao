@@ -16,7 +16,11 @@ import {
   Filter,
   Code2,
   Calendar,
-  Layers
+  Layers,
+  ShieldCheck,
+  Eye,
+  Key,
+  Lock
 } from 'lucide-react';
 import { 
   getFunnels, 
@@ -24,6 +28,7 @@ import {
   duplicateFunnel, 
   getAuthorizedUsers, 
   addAuthorizedUser, 
+  updateUserPermissions,
   removeAuthorizedUser,
   getFunnelMetrics,
   getFormSubmissions,
@@ -47,6 +52,14 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
     passwordInitial: '',
     whatsapp: '',
     plan: 'Plano Pro'
+  });
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    canViewFunnels: true,
+    canCreateFunnels: true,
+    canEditFunnels: true,
+    canViewSubmissions: true
   });
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState(null);
@@ -133,17 +146,67 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
     showNotification('Planilha CSV/Excel gerada e baixada com sucesso!');
   };
 
-  const handleAddUser = async (e) => {
+  const isMaster = user?.isMaster || user?.email?.toLowerCase().trim() === 'johnrenneradm@gmail.com';
+  const canViewFunnels = isMaster || user?.permissions?.canViewFunnels !== false;
+  const canCreateFunnels = isMaster || user?.permissions?.canCreateFunnels !== false;
+  const canEditFunnels = isMaster || user?.permissions?.canEditFunnels !== false;
+  const canViewSubmissions = isMaster || user?.permissions?.canViewSubmissions !== false;
+
+  const handleCreateUserWithPerms = async (e) => {
     e.preventDefault();
-    if (!newEmail.trim()) return;
+    if (!newUser.email.trim()) return;
     try {
-      await addAuthorizedUser(newEmail.trim(), user?.email || 'admin');
-      setNewEmail('');
-      showNotification(`E-mail ${newEmail.trim()} adicionado.`);
+      await addAuthorizedUser(
+        newUser.email.trim(),
+        {
+          canViewFunnels: newUser.canViewFunnels,
+          canCreateFunnels: newUser.canCreateFunnels,
+          canEditFunnels: newUser.canEditFunnels,
+          canViewSubmissions: newUser.canViewSubmissions
+        },
+        newUser.name.trim(),
+        user?.email || 'admin'
+      );
+      setNewUser({
+        name: '',
+        email: '',
+        canViewFunnels: true,
+        canCreateFunnels: true,
+        canEditFunnels: true,
+        canViewSubmissions: true
+      });
+      showNotification(`Usuário ${newUser.email.trim()} adicionado com permissões definidas.`);
       const updated = await getAuthorizedUsers();
       setAuthorizedUsers(updated);
     } catch (err) {
-      showNotification(err.message || 'Erro ao adicionar.', 'error');
+      showNotification(err.message || 'Erro ao adicionar usuário.', 'error');
+    }
+  };
+
+  const handleToggleUserPermission = async (userEmail, permKey, currentVal) => {
+    const targetUser = authorizedUsers.find(u => u.email === userEmail);
+    if (!targetUser) return;
+    if (targetUser.role === 'super_admin' || userEmail === 'johnrenneradm@gmail.com') {
+      showNotification('O Proprietário Master possui todas as permissões fixas.', 'error');
+      return;
+    }
+
+    const updatedPerms = {
+      ...(targetUser.permissions || {
+        canViewFunnels: true,
+        canCreateFunnels: true,
+        canEditFunnels: true,
+        canViewSubmissions: true
+      }),
+      [permKey]: !currentVal
+    };
+
+    try {
+      await updateUserPermissions(userEmail, updatedPerms);
+      setAuthorizedUsers(prev => prev.map(u => u.email === userEmail ? { ...u, permissions: updatedPerms } : u));
+      showNotification(`Permissão "${permKey}" atualizada para ${userEmail}.`);
+    } catch (err) {
+      showNotification(err.message || 'Erro ao atualizar permissão.', 'error');
     }
   };
 
@@ -231,13 +294,15 @@ function doPost(e) {
                 Crie experiências fluidas e direcione leads qualificados para o WhatsApp.
               </p>
             </div>
-            <button
-              onClick={onCreateNew}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-full transition-all shadow-sm active:scale-95"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Novo Funil</span>
-            </button>
+            {canCreateFunnels && (
+              <button
+                onClick={onCreateNew}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-full transition-all shadow-sm active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Funil</span>
+              </button>
+            )}
           </div>
 
           {/* Cards de Métricas Sem Contornos Duros */}
@@ -372,39 +437,43 @@ function doPost(e) {
                         </div>
 
                         {/* Botão Baixar Planilha Direto */}
-                        <button
-                          onClick={() => handleExportSpreadsheet(funnel.id, funnel.design?.headline)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full transition-colors"
-                          title="Baixar planilha de respostas deste formulário (CSV / Excel)"
-                        >
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                          <span>Planilha ({subCount})</span>
-                        </button>
+                        {canViewSubmissions && (
+                          <button
+                            onClick={() => handleExportSpreadsheet(funnel.id, funnel.design?.headline)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-full transition-colors"
+                            title="Baixar planilha de respostas deste formulário (CSV / Excel)"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>Planilha ({subCount})</span>
+                          </button>
+                        )}
 
                         {/* Ações */}
-                        <div className="flex items-center gap-1 pl-1">
-                          <button
-                            onClick={() => onEditFunnel(funnel.id)}
-                            className="p-2 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-full transition-colors"
-                            title="Editar"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDuplicate(funnel.id)}
-                            className="p-2 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-full transition-colors"
-                            title="Duplicar"
-                          >
-                            <CopyPlus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFunnel(funnel.id, funnel.design?.headline)}
-                            className="p-2 text-[#86868B] hover:text-[#FF3B30] hover:bg-rose-50 rounded-full transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {canEditFunnels && (
+                          <div className="flex items-center gap-1 pl-1">
+                            <button
+                              onClick={() => onEditFunnel(funnel.id)}
+                              className="p-2 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-full transition-colors"
+                              title="Editar"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDuplicate(funnel.id)}
+                              className="p-2 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-full transition-colors"
+                              title="Duplicar"
+                            >
+                              <CopyPlus className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteFunnel(funnel.id, funnel.design?.headline)}
+                              className="p-2 text-[#86868B] hover:text-[#FF3B30] hover:bg-rose-50 rounded-full transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -747,6 +816,265 @@ function doPost(e) {
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* ABA: USUÁRIOS & PERMISSÕES                               */}
+      {/* ======================================================== */}
+      {activeTab === 'users' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-[#1D1D1F]">
+                Usuários & Permissões
+              </h1>
+              <p className="text-xs text-[#86868B] mt-0.5">
+                Controle quem tem acesso ao painel e defina permissões para ver funis, criar novos funis, editar e exportar planilhas.
+              </p>
+            </div>
+          </div>
+
+          {/* Card: Cadastrar Novo Usuário com Permissões */}
+          <div className="apple-card p-6 space-y-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-[#86868B] flex items-center gap-1.5">
+              <UserPlus className="w-4 h-4 text-[#0071E3]" />
+              <span>Adicionar Membro & Definir Permissões</span>
+            </h2>
+
+            <form onSubmit={handleCreateUserWithPerms} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">Nome / Função</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Gestor de Tráfego / Atendente"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">E-mail do Usuário *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="membro@empresa.com"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
+                    className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Checkboxes de Permissões */}
+              <div className="p-4 rounded-2xl bg-black/[0.025] space-y-2">
+                <span className="text-[11px] font-semibold text-[#1D1D1F] block mb-1">
+                  Permissões de Acesso do Usuário:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white shadow-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newUser.canViewFunnels}
+                      onChange={(e) => setNewUser(prev => ({ ...prev, canViewFunnels: e.target.checked }))}
+                      className="rounded text-[#0071E3] focus:ring-0"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-[#1D1D1F] block">Ver meus funis</span>
+                      <span className="text-[10px] text-[#86868B]">Acessar lista e métricas</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white shadow-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newUser.canCreateFunnels}
+                      onChange={(e) => setNewUser(prev => ({ ...prev, canCreateFunnels: e.target.checked }))}
+                      className="rounded text-[#0071E3] focus:ring-0"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-[#1D1D1F] block">Criar funil</span>
+                      <span className="text-[10px] text-[#86868B]">Criar novos e duplicar</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white shadow-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newUser.canEditFunnels}
+                      onChange={(e) => setNewUser(prev => ({ ...prev, canEditFunnels: e.target.checked }))}
+                      className="rounded text-[#0071E3] focus:ring-0"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-[#1D1D1F] block">Editar & Excluir</span>
+                      <span className="text-[10px] text-[#86868B]">Alterar perguntas</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white shadow-sm cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newUser.canViewSubmissions}
+                      onChange={(e) => setNewUser(prev => ({ ...prev, canViewSubmissions: e.target.checked }))}
+                      className="rounded text-[#0071E3] focus:ring-0"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-[#1D1D1F] block">Ver Planilhas</span>
+                      <span className="text-[10px] text-[#86868B]">Baixar leads em CSV</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-full shadow-sm transition-all active:scale-95 flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Autorizar Usuário</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Lista de Usuários Autorizados */}
+          <div className="apple-card overflow-hidden">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-black/[0.04]">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[#86868B]">
+                Equipe & Usuários Autorizados ({authorizedUsers.length + 1})
+              </h3>
+            </div>
+
+            <div className="divide-y divide-black/[0.04]">
+              {/* PROPRIETÁRIO MASTER (SEMPRE NO TOPO) */}
+              <div className="p-5 bg-blue-500/[0.02] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-bold text-[#1D1D1F]">Proprietário Master</span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0071E3]/15 text-[#0071E3] tracking-wide">
+                      PROPRIETÁRIO (ACESSO TOTAL)
+                    </span>
+                    <span className="text-[10px] text-[#86868B] font-mono">CPF: ***.***.283-19</span>
+                  </div>
+                  <p className="text-xs text-[#86868B] font-mono">
+                    johnrenneradm@gmail.com
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap text-[11px] font-semibold text-emerald-700">
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Ver Funis
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Criar Funil
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Editar Funil
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-500/10 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Ver Planilhas
+                  </span>
+                </div>
+              </div>
+
+              {/* DEMAIS USUÁRIOS */}
+              {authorizedUsers
+                .filter(u => u.email !== 'johnrenneradm@gmail.com')
+                .map((u) => {
+                  const perms = u.permissions || {
+                    canViewFunnels: true,
+                    canCreateFunnels: true,
+                    canEditFunnels: true,
+                    canViewSubmissions: true
+                  };
+
+                  return (
+                    <div key={u.email} className="p-5 hover:bg-black/[0.015] transition-colors flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-[#1D1D1F]">{u.name || u.email.split('@')[0]}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-black/[0.05] text-[#86868B]">
+                            {u.role || 'Membro'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#86868B] font-mono">{u.email}</p>
+                      </div>
+
+                      {/* Permissões Interativas (Clique para Alternar) */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserPermission(u.email, 'canViewFunnels', perms.canViewFunnels)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${
+                            perms.canViewFunnels !== false
+                              ? 'bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20'
+                              : 'bg-black/[0.04] text-[#86868B] hover:bg-black/[0.08]'
+                          }`}
+                          title="Clique para ativar/desativar permissão de ver funis"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Ver Funis: {perms.canViewFunnels !== false ? 'SIM' : 'NÃO'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserPermission(u.email, 'canCreateFunnels', perms.canCreateFunnels)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${
+                            perms.canCreateFunnels !== false
+                              ? 'bg-blue-500/10 text-blue-800 hover:bg-blue-500/20'
+                              : 'bg-black/[0.04] text-[#86868B] hover:bg-black/[0.08]'
+                          }`}
+                          title="Clique para ativar/desativar permissão de criar funis"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Criar Funil: {perms.canCreateFunnels !== false ? 'SIM' : 'NÃO'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserPermission(u.email, 'canEditFunnels', perms.canEditFunnels)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${
+                            perms.canEditFunnels !== false
+                              ? 'bg-indigo-500/10 text-indigo-800 hover:bg-indigo-500/20'
+                              : 'bg-black/[0.04] text-[#86868B] hover:bg-black/[0.08]'
+                          }`}
+                          title="Clique para ativar/desativar permissão de editar funis"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Editar: {perms.canEditFunnels !== false ? 'SIM' : 'NÃO'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleUserPermission(u.email, 'canViewSubmissions', perms.canViewSubmissions)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all flex items-center gap-1 ${
+                            perms.canViewSubmissions !== false
+                              ? 'bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20'
+                              : 'bg-black/[0.04] text-[#86868B] hover:bg-black/[0.08]'
+                          }`}
+                          title="Clique para ativar/desativar permissão de ver e baixar planilhas"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
+                          <span>Planilhas: {perms.canViewSubmissions !== false ? 'SIM' : 'NÃO'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUser(u.email)}
+                          className="p-1.5 text-[#86868B] hover:text-[#FF3B30] hover:bg-rose-50 rounded-lg transition-colors ml-2"
+                          title="Revogar acesso deste usuário"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         </div>
       )}

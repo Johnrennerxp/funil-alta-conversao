@@ -71,7 +71,9 @@ export default function PublicFunnel() {
   }, [currentStep, textInput, funnel]);
 
   useEffect(() => {
-    if (currentStep === 999 && redirectUrl) {
+    const isAutoRedirect = funnel?.whatsapp?.autoRedirect !== false;
+    if (currentStep === 999 && redirectUrl && isAutoRedirect) {
+      setCountdown(3);
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -84,7 +86,7 @@ export default function PublicFunnel() {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [currentStep, redirectUrl]);
+  }, [currentStep, redirectUrl, funnel]);
 
   if (loading) {
     return (
@@ -488,7 +490,13 @@ export default function PublicFunnel() {
                 Tudo pronto para o seu atendimento
               </h2>
               <p className="text-xs sm:text-sm opacity-70 max-w-sm mx-auto leading-relaxed">
-                Abrindo o WhatsApp em <span className="font-bold text-emerald-500 font-mono text-base">{countdown}</span> segundos...
+                {funnel?.whatsapp?.autoRedirect !== false ? (
+                  <>
+                    Abrindo o WhatsApp em <span className="font-bold text-emerald-500 font-mono text-base">{countdown}</span> segundos...
+                  </>
+                ) : (
+                  'Clique no botão abaixo para iniciar seu atendimento exclusivo no WhatsApp.'
+                )}
               </p>
             </div>
 

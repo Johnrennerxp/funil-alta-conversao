@@ -215,22 +215,49 @@ export function subscribeToAuth(callback) {
       if (user) {
         let isAdmin = await checkIsAdmin(user.email);
         const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
+        const isOwnerEmail = user.email?.toLowerCase().trim() === 'johnrenneradm@gmail.com';
+        const isMaster = isGoogleUser || isOwnerEmail;
 
         // Proprietário Master (Google): nunca é bloqueado e é adicionado automaticamente
-        if (!isAdmin && isGoogleUser) {
+        if (!isAdmin && isMaster) {
           try {
-            await addAuthorizedUser(user.email, 'Google Master Login');
+            await addAuthorizedUser(user.email, {
+              canViewFunnels: true,
+              canCreateFunnels: true,
+              canEditFunnels: true,
+              canViewSubmissions: true
+            }, user.displayName || 'Proprietário Master', 'Google Master Login');
             isAdmin = true;
           } catch (e) {
             isAdmin = true;
           }
         }
 
+        // Busca permissões específicas se existir doc em authorized_users
+        let userPermissions = {
+          canViewFunnels: true,
+          canCreateFunnels: true,
+          canEditFunnels: true,
+          canViewSubmissions: true
+        };
+
+        if (db && !isMaster) {
+          try {
+            const userDoc = await getDoc(doc(db, 'authorized_users', user.email.toLowerCase().trim()));
+            if (userDoc.exists() && userDoc.data().permissions) {
+              userPermissions = userDoc.data().permissions;
+            }
+          } catch (e) {
+            console.warn('Erro ao carregar permissões do usuário:', e);
+          }
+        }
+
         callback({ 
           ...user, 
-          isAdmin: isAdmin || isGoogleUser,
-          isMaster: isGoogleUser,
-          cpf: isGoogleUser ? MASTER_CPF : null
+          isAdmin: isAdmin || isMaster,
+          isMaster: isMaster,
+          cpf: isMaster ? MASTER_CPF : null,
+          permissions: userPermissions
         });
       } else {
         callback(null);
@@ -415,36 +442,78 @@ export async function checkIsAdmin(email) {
 export async function getAuthorizedUsers() {
   if (isFirebaseConfigured && db) {
     const snap = await getDocs(collection(db, 'authorized_users'));
-    return snap.docs.map(d => ({
-      email: d.id,
-      addedAt: d.data().addedAt || null,
-      addedBy: d.data().addedBy || null
-    }));
+    return snap.docs.map(d => {
+      const data = d.data();
+      return {
+        email: d.id,
+        name: data.name || (d.id === 'johnrenneradm@gmail.com' ? 'Proprietário Master' : d.id.split('@')[0]),
+        role: data.role || (d.id === 'johnrenneradm@gmail.com' ? 'super_admin' : 'user'),
+        permissions: data.permissions || {
+          canViewFunnels: true,
+          canCreateFunnels: true,
+          canEditFunnels: true,
+          canViewSubmissions: true
+        },
+        addedAt: data.addedAt?.toDate ? data.addedAt.toDate().toISOString() : data.addedAt || null,
+        addedBy: data.addedBy || null
+      };
+    });
   } else {
     const users = getLocalItem(STORAGE_KEYS.USERS, ['admin@empresa.com']);
     return users.map(u => ({
       email: u,
+      name: u.split('@')[0],
+      role: u === 'johnrenneradm@gmail.com' ? 'super_admin' : 'user',
+      permissions: {
+        canViewFunnels: true,
+        canCreateFunnels: true,
+        canEditFunnels: true,
+        canViewSubmissions: true
+      },
       addedAt: new Date().toISOString(),
       addedBy: 'Sistema Local'
     }));
   }
 }
 
-export async function addAuthorizedUser(email, currentUserEmail = 'admin') {
+export async function addAuthorizedUser(email, permissions = null, name = '', currentUserEmail = 'admin') {
   if (!email) throw new Error('E-mail obrigatório');
   const cleanEmail = email.toLowerCase().trim();
 
+  const userPerms = permissions || {
+    canViewFunnels: true,
+    canCreateFunnels: true,
+    canEditFunnels: true,
+    canViewSubmissions: true
+  };
+
   if (isFirebaseConfigured && db) {
     await setDoc(doc(db, 'authorized_users', cleanEmail), {
+      email: cleanEmail,
+      name: name.trim() || cleanEmail.split('@')[0],
+      role: 'user',
+      permissions: userPerms,
       addedAt: serverTimestamp(),
       addedBy: currentUserEmail
-    });
+    }, { merge: true });
   } else {
     const users = getLocalItem(STORAGE_KEYS.USERS, ['admin@empresa.com']);
     if (!users.includes(cleanEmail)) {
       users.push(cleanEmail);
       setLocalItem(STORAGE_KEYS.USERS, users);
     }
+  }
+  return true;
+}
+
+export async function updateUserPermissions(email, permissions) {
+  if (!email) throw new Error('E-mail obrigatório');
+  const cleanEmail = email.toLowerCase().trim();
+
+  if (isFirebaseConfigured && db) {
+    await updateDoc(doc(db, 'authorized_users', cleanEmail), {
+      permissions: permissions
+    });
   }
   return true;
 }
@@ -456,6 +525,10 @@ export async function removeAuthorizedUser(email, currentLoggedEmail) {
   // Trava de segurança: impede auto-exclusão
   if (cleanEmail === (currentLoggedEmail || '').toLowerCase().trim()) {
     throw new Error('Operação bloqueada: Você não pode remover seu próprio e-mail da lista de administradores.');
+  }
+
+  if (cleanEmail === 'johnrenneradm@gmail.com') {
+    throw new Error('Operação bloqueada: O proprietário master não pode ser removido.');
   }
 
   if (isFirebaseConfigured && db) {

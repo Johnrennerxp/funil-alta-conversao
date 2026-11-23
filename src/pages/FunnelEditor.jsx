@@ -12,7 +12,9 @@ import {
   Check, 
   X, 
   Upload, 
-  ExternalLink
+  ExternalLink,
+  FileText,
+  Sparkles
 } from 'lucide-react';
 import MobileSimulator from '../components/MobileSimulator';
 import { getFunnels, saveFunnel } from '../services/firebase';
@@ -52,6 +54,22 @@ export default function FunnelEditor({ funnelId, onBack }) {
   const [logoMode, setLogoMode] = useState('url');
   const [compressingLogo, setCompressingLogo] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkMode, setBulkMode] = useState('replace'); // 'replace' | 'append'
+  const [bulkText, setBulkText] = useState('');
+
+  const BULK_TEMPLATE_EXAMPLE = `1. Qual é o faturamento mensal aproximado da sua empresa?
+- Abaixo de R$ 10.000 / mês [x]
+- De R$ 10.000 a R$ 50.000 / mês [v]
+- Acima de R$ 50.000 / mês [v]
+
+2. Você já possui equipe comercial ativa?
+- Sim, já tenho time comercial [v]
+- Não, eu mesmo vendo tudo [v]
+- Apenas pesquisando sem intenção de contratar [x]
+
+3. Qual é o seu nome e WhatsApp com DDD para contato?
+[texto]`;
 
   const [formData, setFormData] = useState({
     id: funnelId || '',
@@ -100,7 +118,8 @@ export default function FunnelEditor({ funnelId, onBack }) {
     },
     whatsapp: {
       introText: 'Olá! Concluí a qualificação:',
-      outroText: 'Gostaria de dar sequência ao atendimento com o especialista.'
+      outroText: 'Gostaria de dar sequência ao atendimento com o especialista.',
+      autoRedirect: true
     }
   });
 
@@ -231,6 +250,79 @@ export default function FunnelEditor({ funnelId, onBack }) {
       qList[qIndex].options = qList[qIndex].options.filter((_, idx) => idx !== optIndex);
       return { ...prev, questions: qList };
     });
+  };
+
+  const handleImportBulk = () => {
+    if (!bulkText.trim()) {
+      alert('Cole o texto das perguntas antes de importar.');
+      return;
+    }
+
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsedQuestions = [];
+    let currentQ = null;
+
+    for (let line of lines) {
+      const isOptionLine = /^[-*•]|\([a-z0-9]\)|\[[vx\+\-]/i.test(line);
+      const isTextPlaceholder = /^\[texto\]|^\[text\]|^\(texto\)/i.test(line);
+
+      if (isTextPlaceholder && currentQ) {
+        currentQ.type = 'short_text';
+        currentQ.options = [];
+        currentQ.placeholder = 'Digite sua resposta...';
+        continue;
+      }
+
+      if (!isOptionLine && !isTextPlaceholder) {
+        // Nova pergunta
+        const cleanTitle = line.replace(/^(\d+[\.\)]|pergunta\s*\d+:?|p\d+:?)\s*/i, '').trim();
+        currentQ = {
+          id: 'q_' + Math.random().toString(36).substring(2, 9),
+          title: cleanTitle,
+          subtitle: '',
+          type: 'single_choice',
+          required: true,
+          options: []
+        };
+        parsedQuestions.push(currentQ);
+      } else if (isOptionLine && currentQ) {
+        let text = line.replace(/^[-*•]\s*/, '').trim();
+        let isQualified = true;
+
+        if (/\[(x|-|desqualificado|desqualificada|nao|não)\]/i.test(text)) {
+          isQualified = false;
+          text = text.replace(/\[(x|-|desqualificado|desqualificada|nao|não)\]/gi, '').trim();
+        } else if (/\[(v|\+|qualificado|qualificada|sim|ok)\]/i.test(text)) {
+          isQualified = true;
+          text = text.replace(/\[(v|\+|qualificado|qualificada|sim|ok)\]/gi, '').trim();
+        }
+
+        currentQ.options.push({
+          id: 'opt_' + Math.random().toString(36).substring(2, 7),
+          text: text,
+          isQualified: isQualified
+        });
+      }
+    }
+
+    for (let q of parsedQuestions) {
+      if (q.options.length === 0) {
+        q.type = 'short_text';
+        q.placeholder = 'Digite sua resposta...';
+      }
+    }
+
+    if (parsedQuestions.length === 0) {
+      alert('Nenhuma pergunta identificada. Verifique o modelo e tente novamente.');
+      return;
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      questions: bulkMode === 'replace' ? parsedQuestions : [...prev.questions, ...parsedQuestions]
+    }));
+
+    setShowBulkModal(false);
   };
 
   return (
@@ -542,7 +634,20 @@ export default function FunnelEditor({ funnelId, onBack }) {
                       <h3 className="text-sm font-semibold text-[#1D1D1F]">Perguntas ({formData.questions.length})</h3>
                       <p className="text-xs text-[#86868B]">Fluxo estilo Typeform com qualificação por opção.</p>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBulkText(BULK_TEMPLATE_EXAMPLE);
+                          setShowBulkModal(true);
+                        }}
+                        className="px-3 py-1 text-xs font-semibold bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20 rounded-full transition-colors flex items-center gap-1"
+                        title="Importar perguntas e respostas qualificadas colando um texto"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Copia e Cola (Massa)</span>
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => addQuestion('single_choice')}
@@ -769,13 +874,46 @@ export default function FunnelEditor({ funnelId, onBack }) {
                       className="w-full px-4 py-2.5 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
                     />
                   </div>
+
+                  {/* Toggle: Redirecionamento Automático para WhatsApp */}
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-black/[0.025] mt-2">
+                    <div>
+                      <span className="text-xs font-semibold text-[#1D1D1F] block">
+                        Redirecionamento Automático
+                      </span>
+                      <p className="text-[11px] text-[#86868B] mt-0.5">
+                        {formData.whatsapp?.autoRedirect !== false
+                          ? 'O lead qualificado é enviado automaticamente ao WhatsApp após 3 segundos.'
+                          : 'O lead qualificado visualiza a tela de aprovação com o botão e clica manualmente.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({
+                        ...prev,
+                        whatsapp: {
+                          ...prev.whatsapp,
+                          autoRedirect: prev.whatsapp?.autoRedirect === false ? true : false
+                        }
+                      }))}
+                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                        formData.whatsapp?.autoRedirect !== false ? 'bg-[#34C759]' : 'bg-black/20'
+                      }`}
+                    >
+                      <div
+                        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                          formData.whatsapp?.autoRedirect !== false ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
           </div>
 
-          {/* PAINEL DIREITO: SIMULADOR MOBILE REAL-TIME */}
+          {/* PAINEL DIREITO: SIMULADOR REAL-TIME (CELULAR, TABLET, PC) */}
           {showSimulator && (
             <div className="lg:col-span-5 sticky top-16 flex justify-center pb-8">
               <MobileSimulator funnel={formData} />
@@ -784,6 +922,100 @@ export default function FunnelEditor({ funnelId, onBack }) {
 
         </div>
       </div>
+
+      {/* MODAL COPIA E COLA (IMPORTAÇÃO EM MASSA) */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white max-w-xl w-full rounded-3xl shadow-2xl p-6 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-[#1D1D1F] flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#0071E3]" />
+                  <span>Copia e Cola de Perguntas & Qualificação</span>
+                </h3>
+                <p className="text-xs text-[#86868B] mt-0.5">
+                  Cole perguntas prontas com tags <strong className="text-emerald-600">[v]</strong> (qualificado) e <strong className="text-rose-600">[x]</strong> (desqualificado).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="p-1.5 text-[#86868B] hover:text-[#1D1D1F] rounded-full hover:bg-black/[0.05]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-[#1D1D1F]">Modo:</span>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bulkMode"
+                    value="replace"
+                    checked={bulkMode === 'replace'}
+                    onChange={() => setBulkMode('replace')}
+                  />
+                  <span>Substituir existentes</span>
+                </label>
+                <label className="flex items-center gap-1 cursor-pointer ml-2">
+                  <input
+                    type="radio"
+                    name="bulkMode"
+                    value="append"
+                    checked={bulkMode === 'append'}
+                    onChange={() => setBulkMode('append')}
+                  />
+                  <span>Adicionar ao final</span>
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBulkText(BULK_TEMPLATE_EXAMPLE)}
+                className="text-xs font-semibold text-[#0071E3] hover:underline"
+              >
+                Restaurar Exemplo
+              </button>
+            </div>
+
+            <textarea
+              rows={12}
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder="Cole aqui o texto..."
+              className="w-full flex-1 p-3.5 rounded-2xl bg-black/[0.03] text-xs font-mono text-[#1D1D1F] focus:bg-white focus:ring-2 focus:ring-[#0071E3]/20 focus:outline-none resize-none leading-relaxed"
+            />
+
+            <div className="p-3 bg-black/[0.03] rounded-xl text-[11px] text-[#86868B] space-y-1">
+              <p><strong>Regras simples de formatação:</strong></p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Linhas numeradas ou títulos viram a pergunta (ex: <code className="text-[#1D1D1F]">1. Qual seu faturamento?</code>).</li>
+                <li>Opções iniciadas com hífen <code className="text-[#1D1D1F]">- Opção [v]</code> (qualificado) ou <code className="text-[#1D1D1F]">- Opção [x]</code> (desqualificado).</li>
+                <li>Para perguntas abertas, digite <code className="text-[#1D1D1F]">[texto]</code> abaixo do título.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-[#86868B] hover:text-[#1D1D1F] rounded-full"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleImportBulk}
+                className="px-5 py-2 text-xs font-semibold bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-full shadow-sm active:scale-95"
+              >
+                Importar Perguntas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Users, FileSpreadsheet, Lock, LogOut, Sparkles } from 'lucide-react';
+import { Layers, Users, FileSpreadsheet, Lock, LogOut, Sparkles, ShieldCheck } from 'lucide-react';
 import { isFirebaseConfigured, logoutUser } from '../services/firebase';
 
 export default function Navbar({ activeTab, setActiveTab, user, onLoginClick }) {
@@ -20,10 +20,10 @@ export default function Navbar({ activeTab, setActiveTab, user, onLoginClick }) 
 
           {/* Segmented Control no estilo macOS */}
           {user && (
-            <nav className="flex items-center apple-segmented-bg">
+            <nav className="flex items-center apple-segmented-bg overflow-x-auto py-0.5">
               <button
                 onClick={() => setActiveTab('funnels')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item shrink-0 ${
                   activeTab === 'funnels' ? 'apple-segmented-item-active' : 'text-[#86868B] hover:text-[#1D1D1F]'
                 }`}
               >
@@ -33,7 +33,7 @@ export default function Navbar({ activeTab, setActiveTab, user, onLoginClick }) 
 
               <button
                 onClick={() => setActiveTab('clients')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item shrink-0 ${
                   activeTab === 'clients' ? 'apple-segmented-item-active' : 'text-[#86868B] hover:text-[#1D1D1F]'
                 }`}
               >
@@ -42,8 +42,18 @@ export default function Navbar({ activeTab, setActiveTab, user, onLoginClick }) 
               </button>
 
               <button
+                onClick={() => setActiveTab('users')}
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item shrink-0 ${
+                  activeTab === 'users' ? 'apple-segmented-item-active' : 'text-[#86868B] hover:text-[#1D1D1F]'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Usuários & Permissões</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('submissions')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item shrink-0 ${
                   activeTab === 'submissions' ? 'apple-segmented-item-active' : 'text-[#86868B] hover:text-[#1D1D1F]'
                 }`}
               >
@@ -53,7 +63,7 @@ export default function Navbar({ activeTab, setActiveTab, user, onLoginClick }) 
 
               <button
                 onClick={() => setActiveTab('security')}
-                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item ${
+                className={`flex items-center gap-1.5 px-3 py-1 text-xs apple-segmented-item shrink-0 ${
                   activeTab === 'security' ? 'apple-segmented-item-active' : 'text-[#86868B] hover:text-[#1D1D1F]'
                 }`}
               >
