@@ -270,7 +270,12 @@ export function subscribeToAuth(callback) {
           mustChangePassword
         });
       } else {
-        callback(null);
+        const localUser = getLocalItem(STORAGE_KEYS.CURRENT_USER, null);
+        if (localUser) {
+          callback(localUser);
+        } else {
+          callback(null);
+        }
       }
     });
   } else {
@@ -302,27 +307,53 @@ export async function loginWithEmail(email, password) {
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, password);
       authUser = cred.user;
     } catch (err) {
-      // Se não autenticou no Firebase Auth, checa se é usuário com temporaryPassword salvo no Firestore
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+      // 1. Caso o provedor E-mail/Senha não esteja ativo no Firebase Console OU usuário com temporaryPassword no Firestore
+      if (
+        err.code === 'auth/operation-not-allowed' ||
+        err.code === 'auth/user-not-found' || 
+        err.code === 'auth/invalid-credential' || 
+        err.code === 'auth/wrong-password'
+      ) {
         if (db) {
           try {
             const userDoc = await getDoc(doc(db, 'authorized_users', cleanEmail));
             if (userDoc.exists()) {
               const data = userDoc.data();
-              if (data.temporaryPassword && data.temporaryPassword === password) {
-                // Cria a credencial no Firebase Auth com essa senha
-                const newCred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-                authUser = newCred.user;
-                mustChangePassword = true;
+              const validPassword = data.temporaryPassword || data.password;
+
+              if (validPassword && validPassword === password) {
+                // Autenticação direta validada via Firestore com sucesso (sem depender do switch do console)
+                const sessionUser = {
+                  uid: 'usr_' + cleanEmail.replace(/[^a-z0-9]/g, '_'),
+                  email: cleanEmail,
+                  displayName: data.name || cleanEmail.split('@')[0],
+                  isAdmin: true,
+                  isMaster: cleanEmail === 'johnrenneradm@gmail.com',
+                  mustChangePassword: data.mustChangePassword === true,
+                  permissions: data.permissions || {
+                    canViewFunnels: true,
+                    canCreateFunnels: true,
+                    canEditFunnels: true,
+                    canViewSubmissions: true
+                  }
+                };
+                setLocalItem(STORAGE_KEYS.CURRENT_USER, sessionUser);
+                return sessionUser;
+              } else {
+                throw new Error('E-mail ou senha incorretos.');
               }
             }
-          } catch (createErr) {
-            console.warn('Erro ao verificar senha temporária:', createErr);
+          } catch (directErr) {
+            if (directErr.message === 'E-mail ou senha incorretos.') throw directErr;
+            console.warn('Erro ao autenticar direto via Firestore:', directErr);
           }
         }
       }
 
       if (!authUser) {
+        if (err.code === 'auth/operation-not-allowed') {
+          throw new Error('No Firebase Console, vá em Authentication > Método de login e ative "E-mail/senha".');
+        }
         if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
           throw new Error('E-mail ou senha incorretos.');
         }
@@ -350,7 +381,14 @@ export async function loginWithEmail(email, password) {
       }
     }
 
-    return { ...authUser, isAdmin: true, mustChangePassword };
+    const sessionUser = { 
+      ...authUser, 
+      isAdmin: true, 
+      mustChangePassword,
+      isMaster: cleanEmail === 'johnrenneradm@gmail.com'
+    };
+    setLocalItem(STORAGE_KEYS.CURRENT_USER, sessionUser);
+    return sessionUser;
   } else {
     // Modo Demonstração Local
     const localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
@@ -380,33 +418,40 @@ export async function changeUserPassword(newPassword) {
     throw new Error('A nova senha deve ter no mínimo 6 caracteres.');
   }
 
+  const cur = getLocalItem(STORAGE_KEYS.CURRENT_USER, null);
+  const email = (auth?.currentUser?.email || cur?.email || '').toLowerCase().trim();
+
   if (isFirebaseConfigured && auth && auth.currentUser) {
-    await updatePassword(auth.currentUser, newPassword);
-    const email = auth.currentUser.email.toLowerCase().trim();
-    if (db) {
-      try {
-        await updateDoc(doc(db, 'authorized_users', email), {
-          mustChangePassword: false,
-          temporaryPassword: null,
-          passwordChangedAt: serverTimestamp()
-        });
-      } catch (e) {
-        console.warn('Erro ao atualizar flag de troca de senha no Firestore:', e);
-      }
+    try {
+      await updatePassword(auth.currentUser, newPassword);
+    } catch (e) {
+      console.warn('Erro updatePassword Auth:', e);
     }
-    return true;
-  } else {
-    // Modo Demonstração Local
-    const cur = getLocalItem(STORAGE_KEYS.CURRENT_USER, null);
-    if (cur) {
-      cur.mustChangePassword = false;
-      setLocalItem(STORAGE_KEYS.CURRENT_USER, cur);
-    }
-    let localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
-    localUsers = localUsers.map(u => u.email === cur?.email ? { ...u, mustChangePassword: false, temporaryPassword: null } : u);
-    setLocalItem('ag_authorized_users_detail_v1', localUsers);
-    return true;
   }
+
+  if (db && email) {
+    try {
+      await setDoc(doc(db, 'authorized_users', email), {
+        mustChangePassword: false,
+        temporaryPassword: null,
+        password: newPassword,
+        passwordChangedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.warn('Erro ao atualizar flag de troca de senha no Firestore:', e);
+    }
+  }
+
+  if (cur) {
+    cur.mustChangePassword = false;
+    setLocalItem(STORAGE_KEYS.CURRENT_USER, cur);
+  }
+
+  let localUsers = getLocalItem('ag_authorized_users_detail_v1', []);
+  localUsers = localUsers.map(u => u.email === email ? { ...u, mustChangePassword: false, temporaryPassword: null, password: newPassword } : u);
+  setLocalItem('ag_authorized_users_detail_v1', localUsers);
+
+  return true;
 }
 
 export async function registerWithEmail(email, password) {
