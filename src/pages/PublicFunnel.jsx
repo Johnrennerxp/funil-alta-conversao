@@ -24,7 +24,6 @@ export default function PublicFunnel() {
   const [currentStep, setCurrentStep] = useState(0); // 0 = capa, 1..N = perguntas, 998 = desqualificado, 999 = qualificado
   const [answers, setAnswers] = useState({});
   const [textInput, setTextInput] = useState('');
-  const [countdown, setCountdown] = useState(3);
   const [redirectUrl, setRedirectUrl] = useState('');
 
   useEffect(() => {
@@ -72,18 +71,7 @@ export default function PublicFunnel() {
   useEffect(() => {
     const isAutoRedirect = funnel?.whatsapp?.autoRedirect !== false;
     if (currentStep === 999 && redirectUrl && isAutoRedirect) {
-      setCountdown(3);
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            window.location.href = redirectUrl;
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
+      window.location.href = redirectUrl;
     }
   }, [currentStep, redirectUrl, funnel]);
 
@@ -247,6 +235,12 @@ export default function PublicFunnel() {
     });
     const waUrl = buildWhatsAppUrl({ phone: design.whatsappPhone, message });
     setRedirectUrl(waUrl);
+
+    // Redirecionamento 100% instantâneo e automático ao WhatsApp
+    const isAutoRedirect = funnel?.whatsapp?.autoRedirect !== false;
+    if (isAutoRedirect && waUrl && waUrl !== '#') {
+      window.location.href = waUrl;
+    }
 
     if (tracking.webhookUrl) {
       try {
@@ -494,9 +488,7 @@ export default function PublicFunnel() {
               </h2>
               <p className="text-xs sm:text-sm opacity-70 max-w-sm mx-auto leading-relaxed">
                 {funnel?.whatsapp?.autoRedirect !== false ? (
-                  <>
-                    Abrindo o WhatsApp em <span className="font-bold text-emerald-500 font-mono text-base">{countdown}</span> segundos...
-                  </>
+                  'Redirecionando instantaneamente para o WhatsApp...'
                 ) : (
                   'Clique no botão abaixo para iniciar seu atendimento exclusivo no WhatsApp.'
                 )}

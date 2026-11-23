@@ -452,7 +452,7 @@ export default function MobileSimulator({ funnel }) {
                   <h3 className="text-sm sm:text-base font-bold">Perfil Aprovado!</h3>
                   <p className="text-xs opacity-75 mt-1 leading-relaxed">
                     {isAutoRedirect
-                      ? `Redirecionando para o WhatsApp em ${countdown}s...`
+                      ? 'Redirecionando instantaneamente para o WhatsApp...'
                       : 'Clique no botão abaixo para iniciar o atendimento no WhatsApp.'}
                   </p>
                 </div>
