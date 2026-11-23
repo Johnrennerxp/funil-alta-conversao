@@ -1,54 +1,42 @@
 /**
- * Motor de síntese e formatação de mensagens estruturadas para WhatsApp
- * Gera links universais `https://wa.me/NUMERO?text=...` com introdução,
- * respostas estruturadas em tópicos legíveis e encerramento personalizado.
+ * Motor de formatação limpa e humana de mensagens para WhatsApp
+ * Gera mensagens sem linhas robóticas ou caracteres que quebram em navegadores.
  */
 
 export function sanitizePhone(rawPhone) {
   if (!rawPhone) return '';
-  // Remove parênteses, traços, espaços e caracteres não numéricos
   return rawPhone.replace(/\D/g, '');
 }
 
 export function buildWhatsAppMessage({
-  introText = 'Olá! Acabei de responder o formulário de qualificação:',
-  outroText = 'Gostaria de dar continuidade ao atendimento. Como podemos prosseguir?',
+  introText = 'Olá! Concluí as perguntas:',
+  outroText = 'Podemos dar sequência ao atendimento?',
   answers = [],
   funnelTitle = ''
 }) {
   const lines = [];
 
-  if (funnelTitle) {
-    lines.push(`📋 *${funnelTitle}*`);
-    lines.push('');
-  }
+  const intro = introText || 'Olá! Concluí as perguntas:';
+  lines.push(intro);
+  lines.push('');
 
-  if (introText) {
-    lines.push(introText);
-    lines.push('');
-  }
-
-  lines.push('━━━━━━━━━━━━━━━');
-
-  answers.forEach((item, index) => {
-    const questionNum = index + 1;
+  answers.forEach((item) => {
     const answerText = Array.isArray(item.answer)
       ? item.answer.join(', ')
-      : item.answer || 'Não informado';
+      : item.answer || '';
 
-    lines.push(`*${questionNum}. ${item.question}*`);
-    lines.push(`👉 ${answerText}`);
-    lines.push('');
+    if (answerText) {
+      lines.push(`*${item.question}*`);
+      lines.push(answerText);
+      lines.push('');
+    }
   });
 
-  lines.push('━━━━━━━━━━━━━━━');
-
   if (outroText) {
-    lines.push('');
     lines.push(outroText);
   }
 
-  return lines.join('\n');
+  return lines.join('\n').trim();
 }
 
 export function buildWhatsAppUrl({ phone, message }) {

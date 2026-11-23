@@ -154,6 +154,7 @@ export default function PublicFunnel() {
     setAnswers(updatedAnswers);
 
     if (option.isQualified === false) {
+      setRedirectUrl(''); // Blindagem: zera qualquer URL para nunca redirecionar desqualificados
       const trackingData = getTrackingParams();
       logAnalyticsEvent(funnel.id, 'disqualified', {
         questionId: currentQuestion.id,
@@ -500,7 +501,12 @@ export default function PublicFunnel() {
               </p>
             </div>
 
-            <div className="pt-2 space-y-2">
+            <div className="pt-2 space-y-3">
+              {/* Aviso Rápido e Direto de Envio no WhatsApp */}
+              <div className="max-w-sm mx-auto py-2.5 px-4 rounded-2xl bg-emerald-500/10 text-emerald-800 text-xs font-semibold border border-emerald-500/25 flex items-center justify-center gap-2 animate-pulse">
+                <span>📲 Ao entrar no WhatsApp, clique em "Enviar" para iniciar o atendimento!</span>
+              </div>
+
               <a
                 href={redirectUrl}
                 target="_blank"

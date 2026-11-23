@@ -457,6 +457,10 @@ export default function MobileSimulator({ funnel }) {
                   </p>
                 </div>
 
+                <div className="py-1.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-800 text-[10px] font-semibold text-center border border-emerald-500/20">
+                  📲 Ao entrar no WhatsApp, clique em "Enviar" para iniciar o atendimento!
+                </div>
+
                 <a
                   href={waUrl}
                   target="_blank"
