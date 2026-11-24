@@ -339,10 +339,11 @@ export default function FunnelEditor({ funnelId, onBack }) {
     setShowBulkModal(false);
   };
 
-  // Gerador do Modelo Estruturado (Apenas Design & Síntese da Mensagem)
+  // Gerador do Modelo Estruturado (Design, Síntese da Mensagem & Encerramento)
   const generateModelText = () => {
     const d = formData.design || {};
     const wa = formData.whatsapp || {};
+    const disq = formData.disqualification || {};
 
     return `[TITULO]
 ${d.headline || 'Qualificação Estratégica'}
@@ -366,7 +367,16 @@ ${d.whatsappPhone || '5588999999999'}
 ${wa.introText || 'Olá! Concluí a qualificação:'}
 
 [TEXTO_FECHAMENTO_WHATSAPP]
-${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.'}`;
+${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.'}
+
+[TITULO_DESQUALIFICADO]
+${disq.title || 'Agradecemos o seu tempo'}
+
+[MENSAGEM_DESQUALIFICADO]
+${disq.message || 'No momento, nosso atendimento é direcionado a perfis com orçamento imediato de escala. Acompanhe nossos conteúdos abertos para continuar evoluindo.'}
+
+[AVISO_BLOQUEIO]
+${disq.lockMessage || 'Respostas registradas. Bloqueado para nova tentativa.'}`;
   };
 
   const handleCopyModel = async () => {
@@ -380,7 +390,7 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
     }
   };
 
-  // Parser Resiliente do Modelo (Apenas Design & Síntese da Mensagem)
+  // Parser Resiliente do Modelo (Design, Síntese da Mensagem & Encerramento)
   const parseModelText = (rawText) => {
     if (!rawText || !rawText.trim()) {
       throw new Error('O texto está vazio. Cole um modelo válido antes de aplicar.');
@@ -414,13 +424,23 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
       blocks['WHATSAPP_FECHAMENTO'] ||
       blocks['TEXTO_FECHAMENTO'] ||
       blocks['SINTESE_FECHAMENTO'] ||
+      blocks['TITULO_DESQUALIFICADO'] ||
+      blocks['DESQUALIFICADO_TITULO'] ||
+      blocks['TITULO_ENCERRAMENTO'] ||
+      blocks['MENSAGEM_DESQUALIFICADO'] ||
+      blocks['DESQUALIFICADO_MENSAGEM'] ||
+      blocks['TEXTO_DESQUALIFICADO'] ||
+      blocks['MENSAGEM_ENCERRAMENTO'] ||
+      blocks['AVISO_BLOQUEIO'] ||
+      blocks['BLOQUEIO_TEXTO'] ||
+      blocks['BLOQUEADO_TEXTO'] ||
       blocks['COR_PRIMARIA'] ||
       blocks['COR_FUNDO'] ||
       blocks['COR_TEXTO']
     );
 
     if (!hasAnyValidTag) {
-      throw new Error('Nenhum marcador de Design ou Mensagem encontrado. Certifique-se de usar tags como [TITULO], [SUBTITULO], [WHATSAPP_DESTINO], etc.');
+      throw new Error('Nenhum marcador reconhecido. Use tags como [TITULO], [SUBTITULO], [MENSAGEM_DESQUALIFICADO], etc.');
     }
 
     // 1. Textos de Design
@@ -443,6 +463,11 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
     const introText = blocks['TEXTO_ABERTURA_WHATSAPP'] || blocks['WHATSAPP_ABERTURA'] || blocks['SINTESE_ABERTURA'] || '';
     const outroText = blocks['TEXTO_FECHAMENTO_WHATSAPP'] || blocks['WHATSAPP_FECHAMENTO'] || blocks['TEXTO_FECHAMENTO'] || blocks['SINTESE_FECHAMENTO'] || '';
 
+    // 5. Tela de Desqualificação / Encerramento
+    const disqTitle = blocks['TITULO_DESQUALIFICADO'] || blocks['DESQUALIFICADO_TITULO'] || blocks['TITULO_ENCERRAMENTO'] || '';
+    const disqMessage = blocks['MENSAGEM_DESQUALIFICADO'] || blocks['DESQUALIFICADO_MENSAGEM'] || blocks['TEXTO_DESQUALIFICADO'] || blocks['MENSAGEM_ENCERRAMENTO'] || '';
+    const disqLockMessage = blocks['AVISO_BLOQUEIO'] || blocks['BLOQUEIO_TEXTO'] || blocks['BLOQUEADO_TEXTO'] || '';
+
     return {
       headline,
       subtitle,
@@ -454,7 +479,10 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
       backgroundColor,
       textColor,
       introText,
-      outroText
+      outroText,
+      disqTitle,
+      disqMessage,
+      disqLockMessage
     };
   };
 
@@ -481,6 +509,12 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
           ...formData.whatsapp,
           ...(parsed.introText ? { introText: parsed.introText } : {}),
           ...(parsed.outroText ? { outroText: parsed.outroText } : {})
+        },
+        disqualification: {
+          ...formData.disqualification,
+          ...(parsed.disqTitle ? { title: parsed.disqTitle } : {}),
+          ...(parsed.disqMessage ? { message: parsed.disqMessage } : {}),
+          ...(parsed.disqLockMessage ? { lockMessage: parsed.disqLockMessage } : {})
         }
         // As perguntas existentes permanecem 100% preservadas e intactas!
       };
@@ -492,7 +526,7 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
 
       setShowPasteModal(false);
       setModelTextToPaste('');
-      setSaveMessage('Design e Síntese de Mensagem aplicados com sucesso!');
+      setSaveMessage('Configurações aplicadas e salvas com sucesso!');
       setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
       alert(err.message);
@@ -1235,6 +1269,21 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
                         className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs text-[#86868B] focus:bg-white focus:outline-none"
                       />
                     </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">
+                        Texto do Aviso de Bloqueio (Cadeado)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Respostas registradas. Bloqueado para nova tentativa."
+                        value={formData.disqualification?.lockMessage || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          disqualification: { ...prev.disqualification, lockMessage: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs text-[#86868B] focus:bg-white focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   {/* Configurações de Bloqueio & Não Voltar */}
@@ -1619,7 +1668,7 @@ ${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.
                 rows={13}
                 value={modelTextToPaste}
                 onChange={(e) => setModelTextToPaste(e.target.value)}
-                placeholder={`[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[TEXTO_BOTAO]\nIniciar\n\n[RODAPE]\n🔒 Seus dados estão seguros e protegidos pela LGPD.\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[TEXTO_ABERTURA_WHATSAPP]\nOlá! Concluí a qualificação:\n\n[TEXTO_FECHAMENTO_WHATSAPP]\nGostaria de dar sequência ao atendimento com o especialista.`}
+                placeholder={`[TITULO]\nQualificação Estratégica\n\n[SUBTITULO]\nResponda a algumas perguntas rápidas para direcionarmos seu atendimento.\n\n[TEXTO_ABERTURA]\nResponda com atenção para direcionarmos seu atendimento.\n\n[TEXTO_BOTAO]\nIniciar\n\n[RODAPE]\n🔒 Seus dados estão seguros e protegidos pela LGPD.\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[TEXTO_ABERTURA_WHATSAPP]\nOlá! Concluí a qualificação:\n\n[TEXTO_FECHAMENTO_WHATSAPP]\nGostaria de dar sequência ao atendimento com o especialista.\n\n[TITULO_DESQUALIFICADO]\nAgradecemos o seu tempo\n\n[MENSAGEM_DESQUALIFICADO]\nNo momento, nosso atendimento é direcionado a perfis com orçamento imediato de escala. Acompanhe nossos conteúdos abertos para continuar evoluindo.\n\n[AVISO_BLOQUEIO]\nRespostas registradas. Bloqueado para nova tentativa.`}
                 className="w-full flex-1 p-3.5 bg-black/[0.03] border border-black/[0.06] rounded-2xl text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 resize-none leading-relaxed select-all"
               />
             </div>

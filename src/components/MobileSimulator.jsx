@@ -454,7 +454,7 @@ export default function MobileSimulator({ funnel }) {
                     <div className="space-y-2">
                       <div className="flex items-center justify-center gap-1.5 text-[11px] opacity-70 bg-black/[0.04] py-1.5 px-3 rounded-full max-w-[240px] mx-auto">
                         <Lock className="w-3 h-3 text-rose-500" />
-                        <span>Bloqueado para refazer</span>
+                        <span>{disqualification.lockMessage || 'Bloqueado para refazer'}</span>
                       </div>
                       <button
                         onClick={handleReset}

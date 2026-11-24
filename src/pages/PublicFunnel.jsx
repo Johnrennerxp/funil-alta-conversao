@@ -577,7 +577,7 @@ export default function PublicFunnel() {
               {(isBlocked || funnel?.disqualification?.blockRetry !== false) ? (
                 <div className="flex items-center justify-center gap-1.5 text-xs text-[#86868B] bg-black/[0.04] py-2 px-4 rounded-full max-w-xs mx-auto">
                   <Lock className="w-3.5 h-3.5 text-rose-500" />
-                  <span>Respostas registradas. Bloqueado para nova tentativa.</span>
+                  <span>{disqualification.lockMessage || 'Respostas registradas. Bloqueado para nova tentativa.'}</span>
                 </div>
               ) : (
                 <button
