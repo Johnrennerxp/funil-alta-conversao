@@ -17,7 +17,9 @@ import {
   Sparkles,
   QrCode,
   Lock,
-  Share2
+  Share2,
+  Copy,
+  ClipboardPaste
 } from 'lucide-react';
 import MobileSimulator from '../components/MobileSimulator';
 import ShareModal from '../components/ShareModal';
@@ -60,6 +62,10 @@ export default function FunnelEditor({ funnelId, onBack }) {
   const [saveMessage, setSaveMessage] = useState('');
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [modelTextToPaste, setModelTextToPaste] = useState('');
+  const [modelCopiedToast, setModelCopiedToast] = useState(false);
+  const [applyingModel, setApplyingModel] = useState(false);
   const [bulkMode, setBulkMode] = useState('replace'); // 'replace' | 'append'
   const [bulkText, setBulkText] = useState('');
 
@@ -333,6 +339,222 @@ export default function FunnelEditor({ funnelId, onBack }) {
     setShowBulkModal(false);
   };
 
+  // Gerador do Modelo de Texto Estruturado (Copiar Modelo)
+  const generateModelText = () => {
+    const d = formData.design || {};
+    const questions = formData.questions || [];
+    const wa = formData.whatsapp || {};
+
+    let qText = '';
+    if (questions && questions.length > 0) {
+      qText = questions.map((q, idx) => {
+        const lines = [`${idx + 1}. ${q.title}`];
+        if (q.type === 'short_text') {
+          lines.push('[texto]');
+        } else if (q.options && q.options.length > 0) {
+          q.options.forEach(opt => {
+            const flag = opt.isQualified === false ? ' [x]' : '';
+            lines.push(`- ${opt.text}${flag}`);
+          });
+        }
+        return lines.join('\n');
+      }).join('\n\n');
+    } else {
+      qText = `1. Qual é o seu objetivo principal?
+- Quero aumentar minhas vendas imediatamente
+- Quero organizar processos e equipe
+- Apenas pesquisando sem intenção de investir [x]
+
+2. Qual é o seu nome completo e WhatsApp para contato?
+[texto]`;
+    }
+
+    return `[LOGOMARCA]
+${d.logoUrl || '(Opcional: cole aqui a URL da imagem ou deixe em branco se já subiu no topo)'}
+
+[TITULO]
+${d.headline || 'Qualificação Estratégica'}
+
+[SUBTITULO]
+${d.subtitle || 'Responda a algumas perguntas rápidas para direcionarmos seu atendimento.'}
+
+[TEXTO_ABERTURA]
+${d.welcomeText || d.subtitle || 'Responda com atenção para direcionarmos seu atendimento.'}
+
+[WHATSAPP_DESTINO]
+${d.whatsappPhone || '5588999999999'}
+
+[PERGUNTAS]
+${qText}
+
+[TEXTO_FECHAMENTO]
+${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.'}
+
+[RODAPE]
+${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
+  };
+
+  const handleCopyModel = async () => {
+    try {
+      const text = generateModelText();
+      await navigator.clipboard.writeText(text);
+      setModelCopiedToast(true);
+      setTimeout(() => setModelCopiedToast(false), 3000);
+    } catch {
+      alert('Não foi possível copiar automaticamente para a área de transferência.');
+    }
+  };
+
+  // Parser Resiliente do Modelo Estruturado (Colar e Aplicar)
+  const parseModelText = (rawText) => {
+    if (!rawText || !rawText.trim()) {
+      throw new Error('O texto está vazio. Cole um modelo válido antes de aplicar.');
+    }
+
+    // Extrai blocos marcados com [NOME_DO_BLOCO]
+    const blocks = {};
+    const regex = /\[([A-Z_]+)\]([\s\S]*?)(?=\[[A-Z_]+\]|$)/gi;
+    let match;
+    while ((match = regex.exec(rawText)) !== null) {
+      const tag = match[1].toUpperCase().trim();
+      const content = match[2].trim();
+      blocks[tag] = content;
+    }
+
+    if (!blocks['TITULO'] && !blocks['PERGUNTAS']) {
+      throw new Error('Marcadores obrigatórios não encontrados. Certifique-se de que o texto contenha [TITULO] e [PERGUNTAS].');
+    }
+
+    // 1. Logomarca
+    let logoUrl = blocks['LOGOMARCA'] || '';
+    if (logoUrl.toLowerCase().includes('(opcional') || logoUrl.toLowerCase().includes('deixe em branco')) {
+      logoUrl = '';
+    }
+
+    // 2. Textos Básicos
+    const headline = blocks['TITULO'] || '';
+    const subtitle = blocks['SUBTITULO'] || '';
+    const welcomeText = blocks['TEXTO_ABERTURA'] || '';
+    const footerText = blocks['RODAPE'] || '';
+
+    // 3. WhatsApp Destino
+    const rawPhone = blocks['WHATSAPP_DESTINO'] || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+
+    // 4. Fechamento
+    const outroText = blocks['TEXTO_FECHAMENTO'] || '';
+
+    // 5. Perguntas
+    const rawQuestions = blocks['PERGUNTAS'] || '';
+    const parsedQuestions = [];
+    if (rawQuestions) {
+      const lines = rawQuestions.split('\n').map(l => l.trim()).filter(Boolean);
+      let currentQ = null;
+
+      for (let line of lines) {
+        const isOptionLine = /^[-*•]|\([a-z0-9]\)/i.test(line);
+        const isTextPlaceholder = /^\[texto\]|^\[text\]|^\(texto\)/i.test(line);
+
+        if (isTextPlaceholder && currentQ) {
+          currentQ.type = 'short_text';
+          currentQ.options = [];
+          currentQ.placeholder = 'Digite sua resposta...';
+          continue;
+        }
+
+        if (!isOptionLine && !isTextPlaceholder) {
+          // Linha de Pergunta (remove número inicial como 1., 2), Pergunta 1: etc.)
+          const cleanTitle = line.replace(/^(\d+[\.\)]|pergunta\s*\d+:?|p\d+:?)\s*/i, '').trim();
+          if (cleanTitle) {
+            currentQ = {
+              id: 'q_' + Math.random().toString(36).substring(2, 9),
+              title: cleanTitle,
+              subtitle: '',
+              type: 'single_choice',
+              required: true,
+              options: []
+            };
+            parsedQuestions.push(currentQ);
+          }
+        } else if (isOptionLine && currentQ) {
+          let text = line.replace(/^[-*•]\s*/, '').trim();
+          let isQualified = true;
+
+          if (/\[(x|-|desqualificado|desqualificada|nao|não)\]/i.test(text)) {
+            isQualified = false;
+            text = text.replace(/\[(x|-|desqualificado|desqualificada|nao|não)\]/gi, '').trim();
+          } else if (/\[(v|\+|qualificado|qualificada|sim|ok)\]/i.test(text)) {
+            isQualified = true;
+            text = text.replace(/\[(v|\+|qualificado|qualificada|sim|ok)\]/gi, '').trim();
+          }
+
+          currentQ.options.push({
+            id: 'opt_' + Math.random().toString(36).substring(2, 7),
+            text: text,
+            isQualified: isQualified
+          });
+        }
+      }
+
+      for (let q of parsedQuestions) {
+        if (q.options.length === 0 && q.type !== 'short_text') {
+          q.type = 'short_text';
+          q.placeholder = 'Digite sua resposta...';
+        }
+      }
+    }
+
+    return {
+      logoUrl,
+      headline,
+      subtitle,
+      welcomeText,
+      cleanPhone,
+      outroText,
+      footerText,
+      parsedQuestions
+    };
+  };
+
+  const handleApplyModel = async (textToApply) => {
+    try {
+      setApplyingModel(true);
+      const parsed = parseModelText(textToApply);
+
+      const updated = {
+        ...formData,
+        design: {
+          ...formData.design,
+          ...(parsed.headline ? { headline: parsed.headline } : {}),
+          ...(parsed.subtitle ? { subtitle: parsed.subtitle } : {}),
+          ...(parsed.welcomeText ? { welcomeText: parsed.welcomeText } : {}),
+          ...(parsed.footerText ? { footerText: parsed.footerText } : {}),
+          ...(parsed.cleanPhone ? { whatsappPhone: parsed.cleanPhone } : {}),
+          ...(parsed.logoUrl ? { logoUrl: parsed.logoUrl } : {})
+        },
+        whatsapp: {
+          ...formData.whatsapp,
+          ...(parsed.outroText ? { outroText: parsed.outroText } : {})
+        },
+        questions: parsed.parsedQuestions.length > 0 ? parsed.parsedQuestions : formData.questions
+      };
+
+      setFormData(updated);
+
+      // Persistência imediata no Firebase / Firestore
+      await saveFunnel(updated);
+
+      setShowPasteModal(false);
+      setModelTextToPaste('');
+      setSaveMessage('Estrutura aplicada e salva com sucesso!');
+      setTimeout(() => setSaveMessage(''), 3500);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setApplyingModel(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F5F5F7] pb-16">
       
@@ -414,6 +636,130 @@ export default function FunnelEditor({ funnelId, onBack }) {
           {/* PAINEL ESQUERDO: CONFIGURAÇÃO */}
           <div className={`space-y-4 ${showSimulator ? 'lg:col-span-7' : 'lg:col-span-12'}`}>
             
+            {/* BARRA/BLOCO DE CONFIGURAÇÃO RÁPIDA NO TOPO (LOGO + COPIAR/COLAR MODELO) */}
+            <div className="apple-card p-5 bg-white border border-black/[0.06] rounded-3xl shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-black/[0.05] pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#0071E3] animate-pulse"></span>
+                  <h3 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
+                    Configuração Rápida & Estrutura
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyModel}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black/[0.04] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-semibold rounded-full transition-all active:scale-95 border border-black/[0.06]"
+                    title="Copiar estrutura completa em formato de texto para editar no Bloco de Notas ou ChatGPT"
+                  >
+                    {modelCopiedToast ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-emerald-600 font-bold">Modelo copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-[#0071E3]" />
+                        <span>Copiar Modelo</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelTextToPaste('');
+                      setShowPasteModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-full shadow-sm transition-all active:scale-95"
+                    title="Colar texto estruturado e preencher todo o formulário automaticamente"
+                  >
+                    <ClipboardPaste className="w-3.5 h-3.5" />
+                    <span>Colar Modelo</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Upload / URL da Logomarca */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#1D1D1F] flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-[#0071E3]" />
+                    <span>Logomarca do Formulário</span>
+                  </label>
+                  <div className="flex items-center apple-segmented-bg">
+                    <button
+                      type="button"
+                      onClick={() => setLogoMode('upload')}
+                      className={`px-2.5 py-0.5 text-[11px] apple-segmented-item ${logoMode === 'upload' ? 'apple-segmented-item-active' : 'text-[#86868B]'}`}
+                    >
+                      Upload Local
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLogoMode('url')}
+                      className={`px-2.5 py-0.5 text-[11px] apple-segmented-item ${logoMode === 'url' ? 'apple-segmented-item-active' : 'text-[#86868B]'}`}
+                    >
+                      Link / URL
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    {logoMode === 'upload' ? (
+                      <label className="flex items-center justify-between px-3.5 py-2 bg-black/[0.03] hover:bg-black/[0.05] rounded-xl cursor-pointer transition-colors border border-dashed border-black/[0.1]">
+                        <span className="text-xs font-medium text-[#1D1D1F] truncate">
+                          {compressingLogo ? 'Comprimindo...' : (formData.design?.logoUrl ? 'Trocar imagem...' : 'Selecionar imagem do seu computador')}
+                        </span>
+                        <span className="text-[10px] text-[#86868B] shrink-0 ml-2">&lt; 150KB</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    ) : (
+                      <input
+                        type="url"
+                        placeholder="https://exemplo.com/sua-logo.png"
+                        value={formData.design?.logoUrl || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          design: { ...prev.design, logoUrl: e.target.value }
+                        }))}
+                        className="w-full px-3.5 py-2 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none border border-transparent focus:border-[#0071E3]/20"
+                      />
+                    )}
+                  </div>
+
+                  {/* Pré-visualização Imediata */}
+                  {formData.design?.logoUrl ? (
+                    <div className="flex items-center gap-2 bg-black/[0.03] p-1.5 px-2.5 rounded-xl border border-black/[0.06] shrink-0">
+                      <img
+                        src={formData.design.logoUrl}
+                        alt="Logo"
+                        className="h-6 max-w-[90px] object-contain rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, design: { ...prev.design, logoUrl: '' } }))}
+                        className="text-[11px] text-rose-500 hover:underline font-medium"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-[#86868B] italic px-1 shrink-0 hidden sm:block">
+                      (Sem logo)
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Seletor Segmentado Apple Style */}
             <div className="flex items-center apple-segmented-bg">
               <button
@@ -1108,6 +1454,121 @@ export default function FunnelEditor({ funnelId, onBack }) {
                 Importar Perguntas
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Colar e Aplicar Modelo */}
+      {showPasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-black/[0.06] overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Topo do Modal */}
+            <div className="p-5 border-b border-black/[0.06] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-[#0071E3]/10 text-[#0071E3] flex items-center justify-center shadow-inner">
+                  <ClipboardPaste className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1D1D1F]">Colar e Aplicar Modelo Completo</h3>
+                  <p className="text-[11px] text-[#86868B]">
+                    Cole o texto com marcadores ([TITULO], [PERGUNTAS], etc.). O sistema preenche tudo automaticamente.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasteModal(false)}
+                className="p-1.5 rounded-full text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Ações Rápidas no Topo do Textarea */}
+            <div className="px-5 pt-3 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[#86868B]">Conteúdo do Modelo:</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text) setModelTextToPaste(text);
+                    } catch {
+                      alert('Permissão de leitura negada pelo navegador. Cole manualmente com Ctrl+V na caixa.');
+                    }
+                  }}
+                  className="text-[11px] font-semibold text-[#0071E3] hover:underline flex items-center gap-1"
+                >
+                  <ClipboardPaste className="w-3 h-3" />
+                  <span>Colar da Área de Transferência</span>
+                </button>
+                <span className="text-black/20">|</span>
+                <button
+                  type="button"
+                  onClick={() => setModelTextToPaste(generateModelText())}
+                  className="text-[11px] text-[#86868B] hover:text-[#1D1D1F]"
+                >
+                  Carregar Exemplo
+                </button>
+                <span className="text-black/20">|</span>
+                <button
+                  type="button"
+                  onClick={() => setModelTextToPaste('')}
+                  className="text-[11px] text-rose-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
+
+            {/* Textarea Ampla */}
+            <div className="p-5 pt-2 flex-1 overflow-hidden flex flex-col">
+              <textarea
+                rows={13}
+                value={modelTextToPaste}
+                onChange={(e) => setModelTextToPaste(e.target.value)}
+                placeholder={`[LOGOMARCA]\n(Opcional: cole aqui a URL da imagem ou deixe em branco se já subiu no topo)\n\n[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[PERGUNTAS]\n1. Texto da primeira pergunta?\n- Opção A\n- Opção B\n- Opção C [x]\n\n2. Qual o seu nome e WhatsApp?\n[texto]\n\n[TEXTO_FECHAMENTO]\nMensagem final exibida ao concluir o quiz antes/junto do redirecionamento\n\n[RODAPE]\nTexto do rodapé (ex: Nome da empresa / CNPJ / Direitos reservados)`}
+                className="w-full flex-1 p-3.5 bg-black/[0.03] border border-black/[0.06] rounded-2xl text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 resize-none leading-relaxed select-all"
+              />
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-4 border-t border-black/[0.06] bg-[#F5F5F7] flex items-center justify-between">
+              <span className="text-[11px] text-[#86868B]">
+                Opções com <code className="bg-black/5 px-1 rounded text-rose-600 font-bold">[x]</code> desqualificam o lead automaticamente.
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPasteModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-[#86868B] hover:text-[#1D1D1F] rounded-full transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={applyingModel || !modelTextToPaste.trim()}
+                  onClick={() => handleApplyModel(modelTextToPaste)}
+                  className="px-5 py-2 text-xs font-semibold bg-[#0071E3] hover:bg-[#0077ED] text-white rounded-full shadow-sm active:scale-95 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                >
+                  {applyingModel ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Aplicando e Salvando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Colar e Aplicar</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

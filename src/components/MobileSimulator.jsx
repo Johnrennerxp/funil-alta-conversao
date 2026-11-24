@@ -328,7 +328,7 @@ export default function MobileSimulator({ funnel }) {
                   {design.headline || 'Qualificação Estratégica'}
                 </h2>
                 <p className="text-xs sm:text-sm opacity-75 leading-relaxed">
-                  {design.subtitle || 'Responda para avaliarmos seu momento.'}
+                  {design.welcomeText || design.subtitle || 'Responda para avaliarmos seu momento.'}
                 </p>
 
                 <div className="pt-2">

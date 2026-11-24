@@ -422,9 +422,15 @@ export default function PublicFunnel() {
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight leading-tight">
                 {design.headline || 'Qualificação Estratégica'}
               </h1>
-              <p className="text-sm sm:text-base opacity-70 max-w-md mx-auto leading-relaxed">
-                {design.subtitle || 'Responda com atenção para direcionarmos seu atendimento.'}
-              </p>
+              {design.welcomeText ? (
+                <p className="text-sm sm:text-base opacity-75 max-w-md mx-auto leading-relaxed">
+                  {design.welcomeText}
+                </p>
+              ) : (
+                <p className="text-sm sm:text-base opacity-70 max-w-md mx-auto leading-relaxed">
+                  {design.subtitle || 'Responda com atenção para direcionarmos seu atendimento.'}
+                </p>
+              )}
             </div>
 
             <div className="pt-2">
