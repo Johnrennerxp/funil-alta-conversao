@@ -8,7 +8,8 @@ import {
   RotateCcw,
   Smartphone,
   Tablet,
-  Monitor
+  Monitor,
+  Lock
 } from 'lucide-react';
 import { buildWhatsAppMessage, buildWhatsAppUrl } from '../utils/whatsapp';
 
@@ -263,7 +264,7 @@ export default function MobileSimulator({ funnel }) {
           
           {/* Top Bar Interna */}
           <div className="pt-5 px-4 pb-2 flex items-center justify-between z-20">
-            {currentStep > 0 && currentStep <= totalQuestions ? (
+            {currentStep > 0 && currentStep <= totalQuestions && funnel.allowBackNavigation !== false ? (
               <button
                 onClick={handleBack}
                 className={`p-1.5 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
@@ -431,13 +432,29 @@ export default function MobileSimulator({ funnel }) {
                 <p className="text-xs opacity-75 leading-relaxed">
                   {disqualification.message || 'No momento seu perfil não atende aos requisitos.'}
                 </p>
-                <div className="pt-1">
-                  <button
-                    onClick={handleReset}
-                    className="text-[11px] underline opacity-50 hover:opacity-100 transition-opacity"
-                  >
-                    Recomeçar
-                  </button>
+                <div className="pt-2">
+                  {disqualification?.blockRetry !== false ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center gap-1.5 text-[11px] opacity-70 bg-black/[0.04] py-1.5 px-3 rounded-full max-w-[240px] mx-auto">
+                        <Lock className="w-3 h-3 text-rose-500" />
+                        <span>Bloqueado para refazer</span>
+                      </div>
+                      <button
+                        onClick={handleReset}
+                        className="text-[10px] text-[#0071E3] hover:underline block mx-auto font-medium"
+                        title="Permite ao administrador reiniciar para continuar testando"
+                      >
+                        Resetar Teste (Admin)
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleReset}
+                      className="text-[11px] underline opacity-50 hover:opacity-100 transition-opacity"
+                    >
+                      Recomeçar
+                    </button>
+                  )}
                 </div>
               </div>
             )}

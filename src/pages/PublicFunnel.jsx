@@ -25,6 +25,7 @@ export default function PublicFunnel() {
   const [answers, setAnswers] = useState({});
   const [textInput, setTextInput] = useState('');
   const [redirectUrl, setRedirectUrl] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
 
   useEffect(() => {
     loadFunnelData();
@@ -41,6 +42,17 @@ export default function PublicFunnel() {
         return;
       }
       setFunnel(data);
+
+      // Bloqueio rigoroso: se já foi desqualificado anteriormente e o funil proíbe refazer
+      const isRetryBlocked = data.disqualification?.blockRetry !== false;
+      const blockKey = `funnel_blocked_${data.id || slug}`;
+      try {
+        const savedBlock = isRetryBlocked && localStorage.getItem(blockKey);
+        if (savedBlock) {
+          setIsBlocked(true);
+          setCurrentStep(998);
+        }
+      } catch {}
 
       const tracking = getTrackingParams();
       logAnalyticsEvent(data.id, 'view', tracking);
@@ -74,6 +86,25 @@ export default function PublicFunnel() {
       window.location.href = redirectUrl;
     }
   }, [currentStep, redirectUrl, funnel]);
+
+  // Bloqueio rigoroso de retorno pelo botão voltar do navegador ao ser desqualificado
+  useEffect(() => {
+    const isRetryBlocked = funnel?.disqualification?.blockRetry !== false;
+    if (currentStep === 998 && (isBlocked || isRetryBlocked)) {
+      try {
+        window.history.pushState(null, '', window.location.href);
+      } catch {}
+
+      const handlePopState = () => {
+        try {
+          window.history.pushState(null, '', window.location.href);
+        } catch {}
+      };
+
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [currentStep, isBlocked, funnel]);
 
   if (loading) {
     return (
@@ -123,6 +154,7 @@ export default function PublicFunnel() {
   const isDark = customBg === '#000000' || customBg.startsWith('#0') || customBg.startsWith('#1');
 
   const handleStart = () => {
+    if (isBlocked) return;
     if (questions.length > 0) {
       setCurrentStep(1);
       setTextInput('');
@@ -155,6 +187,25 @@ export default function PublicFunnel() {
         answers: Object.values(updatedAnswers),
         tracking: trackingData
       });
+
+      // Grava bloqueio definitivo para não permitir refazer
+      const isRetryBlocked = funnel.disqualification?.blockRetry !== false;
+      if (isRetryBlocked) {
+        const blockKey = `funnel_blocked_${funnel.id || slug}`;
+        try {
+          localStorage.setItem(blockKey, JSON.stringify({
+            timestamp: new Date().toISOString(),
+            funnelId: funnel.id,
+            questionId: currentQuestion.id,
+            answer: option.text
+          }));
+        } catch {}
+        setIsBlocked(true);
+        try {
+          window.history.pushState(null, '', window.location.href);
+        } catch {}
+      }
+
       setCurrentStep(998);
       return;
     }
@@ -264,6 +315,7 @@ export default function PublicFunnel() {
   };
 
   const handleBack = () => {
+    if (funnel?.allowBackNavigation === false || isBlocked) return;
     if (currentStep > 1 && currentStep <= totalQuestions) {
       setCurrentStep(currentStep - 1);
       const prevQ = questions[currentStep - 2];
@@ -282,7 +334,7 @@ export default function PublicFunnel() {
       {/* Header Superior Limpo */}
       <header className="w-full max-w-xl mx-auto pt-6 px-6 pb-2 z-20">
         <div className="flex items-center justify-between mb-3">
-          {currentStep > 0 && currentStep <= totalQuestions ? (
+          {currentStep > 0 && currentStep <= totalQuestions && funnel?.allowBackNavigation !== false && !isBlocked ? (
             <button
               onClick={handleBack}
               className={`p-2 rounded-full transition-colors ${isDark ? 'hover:bg-white/10' : 'hover:bg-black/5'}`}
@@ -458,16 +510,23 @@ export default function PublicFunnel() {
             </div>
 
             <div className="pt-3">
-              <button
-                onClick={() => {
-                  setCurrentStep(0);
-                  setAnswers({});
-                  setTextInput('');
-                }}
-                className="text-xs opacity-50 hover:opacity-100 underline transition-opacity"
-              >
-                Voltar ao início
-              </button>
+              {(isBlocked || funnel?.disqualification?.blockRetry !== false) ? (
+                <div className="flex items-center justify-center gap-1.5 text-xs text-[#86868B] bg-black/[0.04] py-2 px-4 rounded-full max-w-xs mx-auto">
+                  <Lock className="w-3.5 h-3.5 text-rose-500" />
+                  <span>Respostas registradas. Bloqueado para nova tentativa.</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setCurrentStep(0);
+                    setAnswers({});
+                    setTextInput('');
+                  }}
+                  className="text-xs opacity-50 hover:opacity-100 underline transition-opacity"
+                >
+                  Voltar ao início
+                </button>
+              )}
             </div>
           </div>
         )}

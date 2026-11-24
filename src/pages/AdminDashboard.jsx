@@ -23,8 +23,11 @@ import {
   Lock,
   Search,
   X,
-  MessageCircle
+  MessageCircle,
+  QrCode,
+  Share2
 } from 'lucide-react';
+import ShareModal from '../components/ShareModal';
 import { 
   getFunnels, 
   deleteFunnel, 
@@ -72,6 +75,7 @@ export default function AdminDashboard({ activeTab, user, onEditFunnel, onCreate
   const [submissionSearch, setSubmissionSearch] = useState('');
   const [subFilter, setSubFilter] = useState('all'); // 'all' | 'qualified' | 'disqualified'
   const [createdUserCredentials, setCreatedUserCredentials] = useState(null);
+  const [shareModalFunnel, setShareModalFunnel] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -430,6 +434,15 @@ function doPost(e) {
                             <ExternalLink className="w-3 h-3" />
                             <span>Abrir</span>
                           </a>
+
+                          <button
+                            onClick={() => setShareModalFunnel(funnel)}
+                            className="inline-flex items-center gap-1 text-[11px] text-[#1D1D1F] hover:text-[#0071E3] font-medium"
+                            title="Abrir QR Code, Link Curto, WhatsApp e E-mail"
+                          >
+                            <QrCode className="w-3 h-3 text-[#0071E3]" />
+                            <span>QR / Compartilhar</span>
+                          </button>
                         </div>
                       </div>
 
@@ -478,6 +491,13 @@ function doPost(e) {
                         {/* Ações */}
                         {canEditFunnels && (
                           <div className="flex items-center gap-1 pl-1">
+                            <button
+                              onClick={() => setShareModalFunnel(funnel)}
+                              className="p-2 text-[#86868B] hover:text-[#0071E3] hover:bg-black/[0.04] rounded-full transition-colors"
+                              title="Compartilhar / QR Code"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={() => onEditFunnel(funnel.id)}
                               className="p-2 text-[#86868B] hover:text-[#1D1D1F] hover:bg-black/[0.04] rounded-full transition-colors"
@@ -1364,6 +1384,13 @@ function doPost(e) {
           </div>
         </div>
       )}
+
+      {/* Modal de Compartilhamento & Acesso Fácil */}
+      <ShareModal
+        isOpen={!!shareModalFunnel}
+        onClose={() => setShareModalFunnel(null)}
+        funnel={shareModalFunnel}
+      />
 
     </div>
   );

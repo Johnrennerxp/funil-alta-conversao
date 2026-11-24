@@ -14,9 +14,13 @@ import {
   Upload, 
   ExternalLink,
   FileText,
-  Sparkles
+  Sparkles,
+  QrCode,
+  Lock,
+  Share2
 } from 'lucide-react';
 import MobileSimulator from '../components/MobileSimulator';
+import ShareModal from '../components/ShareModal';
 import { getFunnels, saveFunnel } from '../services/firebase';
 import { compressImageToBase64 } from '../utils/imageCompression';
 
@@ -55,6 +59,7 @@ export default function FunnelEditor({ funnelId, onBack }) {
   const [compressingLogo, setCompressingLogo] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [bulkMode, setBulkMode] = useState('replace'); // 'replace' | 'append'
   const [bulkText, setBulkText] = useState('');
 
@@ -110,8 +115,10 @@ export default function FunnelEditor({ funnelId, onBack }) {
     ],
     disqualification: {
       title: 'Agradecemos o seu tempo',
-      message: 'No momento, nosso atendimento é direcionado a perfis com orçamento imediato de escala. Acompanhe nossos conteúdos abertos para continuar evoluindo.'
+      message: 'No momento, nosso atendimento é direcionado a perfis com orçamento imediato de escala. Acompanhe nossos conteúdos abertos para continuar evoluindo.',
+      blockRetry: true
     },
+    allowBackNavigation: true,
     tracking: {
       pixelId: '',
       webhookUrl: ''
@@ -376,6 +383,16 @@ export default function FunnelEditor({ funnelId, onBack }) {
               <ExternalLink className="w-3 h-3 text-[#86868B]" />
               <span>Testar</span>
             </a>
+
+            <button
+              type="button"
+              onClick={() => setShowShareModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-full bg-black/[0.04] text-[#1D1D1F] hover:bg-black/[0.08] transition-colors"
+              title="Abrir QR Code, Link Curto, WhatsApp e E-mail"
+            >
+              <QrCode className="w-3.5 h-3.5 text-[#0071E3]" />
+              <span>Compartilhar / QR</span>
+            </button>
 
             <button
               onClick={handleSave}
@@ -758,30 +775,88 @@ export default function FunnelEditor({ funnelId, onBack }) {
                   </div>
                 </div>
 
-                {/* Desqualificação */}
-                <div className="apple-card p-6 space-y-3">
-                  <h3 className="text-sm font-semibold text-[#1D1D1F]">Tela de Encerramento (Desqualificados)</h3>
+                {/* Desqualificação & Regras de Retorno */}
+                <div className="apple-card p-6 space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#1D1D1F]">Tela de Encerramento (Desqualificados)</h3>
+                    <p className="text-xs text-[#86868B]">Defina o texto e o comportamento de bloqueio para quem responder errado ou for desqualificado.</p>
+                  </div>
+
                   <div className="space-y-3">
-                    <input
-                      type="text"
-                      placeholder="Título"
-                      value={formData.disqualification?.title || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        disqualification: { ...prev.disqualification, title: e.target.value }
-                      }))}
-                      className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs font-medium text-[#1D1D1F] focus:bg-white focus:outline-none"
-                    />
-                    <textarea
-                      rows={2}
-                      placeholder="Mensagem educada"
-                      value={formData.disqualification?.message || ''}
-                      onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        disqualification: { ...prev.disqualification, message: e.target.value }
-                      }))}
-                      className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs text-[#86868B] focus:bg-white focus:outline-none"
-                    />
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">
+                        Título do Encerramento
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Título (ex: Agradecemos o seu tempo)"
+                        value={formData.disqualification?.title || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          disqualification: { ...prev.disqualification, title: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs font-medium text-[#1D1D1F] focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-[#1D1D1F] mb-1">
+                        Mensagem Explicativa
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Mensagem educada"
+                        value={formData.disqualification?.message || ''}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          disqualification: { ...prev.disqualification, message: e.target.value }
+                        }))}
+                        className="w-full px-4 py-2 rounded-xl bg-black/[0.04] text-xs text-[#86868B] focus:bg-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Configurações de Bloqueio & Não Voltar */}
+                  <div className="pt-3 border-t border-black/[0.06] space-y-3">
+                    <label className="flex items-start gap-3 cursor-pointer select-none group">
+                      <input
+                        type="checkbox"
+                        checked={formData.disqualification?.blockRetry !== false}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          disqualification: { ...prev.disqualification, blockRetry: e.target.checked }
+                        }))}
+                        className="mt-0.5 w-4 h-4 rounded text-[#0071E3] focus:ring-[#0071E3] border-gray-300"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-[#1D1D1F] flex items-center gap-1.5 group-hover:text-[#0071E3] transition-colors">
+                          <Lock className="w-3.5 h-3.5 text-rose-500" />
+                          Bloquear retorno se responder errado ou for desqualificado
+                        </span>
+                        <p className="text-[11px] text-[#86868B] mt-0.5 leading-relaxed">
+                          Impede o lead de voltar atrás, remove o botão de recomeçar, bloqueia o botão voltar do navegador e salva o bloqueio no aparelho dele para não conseguir refazer.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-3 cursor-pointer select-none group pt-1">
+                      <input
+                        type="checkbox"
+                        checked={formData.allowBackNavigation !== false}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          allowBackNavigation: e.target.checked
+                        }))}
+                        className="mt-0.5 w-4 h-4 rounded text-[#0071E3] focus:ring-[#0071E3] border-gray-300"
+                      />
+                      <div>
+                        <span className="text-xs font-semibold text-[#1D1D1F] group-hover:text-[#0071E3] transition-colors">
+                          Permitir botão de voltar entre perguntas normais
+                        </span>
+                        <p className="text-[11px] text-[#86868B] mt-0.5 leading-relaxed">
+                          Se desativado, oculta a seta de voltar no topo durante todo o formulário (o lead só pode avançar para frente).
+                        </p>
+                      </div>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -1016,6 +1091,13 @@ export default function FunnelEditor({ funnelId, onBack }) {
           </div>
         </div>
       )}
+
+      {/* Modal de Compartilhamento & Acesso Fácil */}
+      <ShareModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        funnel={formData}
+      />
     </div>
   );
 }
