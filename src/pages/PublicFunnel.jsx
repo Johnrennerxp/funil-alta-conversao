@@ -312,6 +312,29 @@ export default function PublicFunnel() {
         console.warn('[Webhook] Erro:', e);
       }
     }
+
+    if (tracking.notificationEmail) {
+      try {
+        fetch(`https://formsubmit.co/ajax/${encodeURIComponent(tracking.notificationEmail.trim())}`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            _subject: `🎯 Novo Lead Qualificado: ${design.headline || 'Formulário'}`,
+            _template: 'table',
+            Formulario: design.headline || 'LeadFunnel',
+            Status: 'Qualificado (Aprovado)',
+            Respostas: answersList.map(a => `${a.question}: ${a.answer}`).join('\n\n'),
+            Origem_UTM: trackingParams.utm_source || 'Direto',
+            Data: new Date().toLocaleString('pt-BR')
+          })
+        }).catch(e => console.warn('[Email Notification] Envio assíncrono:', e));
+      } catch (e) {
+        console.warn('[Email Notification] Erro:', e);
+      }
+    }
   };
 
   const handleBack = () => {

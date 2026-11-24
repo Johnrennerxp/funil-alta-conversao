@@ -121,7 +121,8 @@ export default function FunnelEditor({ funnelId, onBack }) {
     allowBackNavigation: true,
     tracking: {
       pixelId: '',
-      webhookUrl: ''
+      webhookUrl: '',
+      notificationEmail: ''
     },
     whatsapp: {
       introText: 'Olá! Concluí a qualificação:',
@@ -901,6 +902,25 @@ export default function FunnelEditor({ funnelId, onBack }) {
                       }))}
                       className="w-full px-4 py-2.5 rounded-xl bg-black/[0.04] text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#1D1D1F] mb-1">
+                      E-mail para Receber Respostas (Alertas de Leads)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="seu-email@dominio.com"
+                      value={formData.tracking?.notificationEmail || ''}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        tracking: { ...prev.tracking, notificationEmail: e.target.value }
+                      }))}
+                      className="w-full px-4 py-2.5 rounded-xl bg-black/[0.04] text-xs text-[#1D1D1F] focus:bg-white focus:outline-none"
+                    />
+                    <p className="text-[11px] text-[#86868B] mt-1">
+                      Receba um alerta formatado por e-mail com todas as respostas sempre que um novo lead se qualificar.
+                    </p>
                   </div>
 
                   <div className="p-4 bg-black/[0.03] rounded-xl text-xs space-y-1 text-[#86868B]">
