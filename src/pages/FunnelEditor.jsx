@@ -339,35 +339,10 @@ export default function FunnelEditor({ funnelId, onBack }) {
     setShowBulkModal(false);
   };
 
-  // Gerador do Modelo de Texto Estruturado (Copiar Modelo)
+  // Gerador do Modelo Estruturado (Apenas Design & Síntese da Mensagem)
   const generateModelText = () => {
     const d = formData.design || {};
-    const questions = formData.questions || [];
     const wa = formData.whatsapp || {};
-
-    let qText = '';
-    if (questions && questions.length > 0) {
-      qText = questions.map((q, idx) => {
-        const lines = [`${idx + 1}. ${q.title}`];
-        if (q.type === 'short_text') {
-          lines.push('[texto]');
-        } else if (q.options && q.options.length > 0) {
-          q.options.forEach(opt => {
-            const flag = opt.isQualified === false ? ' [x]' : '';
-            lines.push(`- ${opt.text}${flag}`);
-          });
-        }
-        return lines.join('\n');
-      }).join('\n\n');
-    } else {
-      qText = `1. Qual é o seu objetivo principal?
-- Quero aumentar minhas vendas imediatamente
-- Quero organizar processos e equipe
-- Apenas pesquisando sem intenção de investir [x]
-
-2. Qual é o seu nome completo e WhatsApp para contato?
-[texto]`;
-    }
 
     return `[TITULO]
 ${d.headline || 'Qualificação Estratégica'}
@@ -378,17 +353,20 @@ ${d.subtitle || 'Responda a algumas perguntas rápidas para direcionarmos seu at
 [TEXTO_ABERTURA]
 ${d.welcomeText || d.subtitle || 'Responda com atenção para direcionarmos seu atendimento.'}
 
+[TEXTO_BOTAO]
+${d.buttonText || 'Iniciar'}
+
+[RODAPE]
+${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}
+
 [WHATSAPP_DESTINO]
 ${d.whatsappPhone || '5588999999999'}
 
-[PERGUNTAS]
-${qText}
+[TEXTO_ABERTURA_WHATSAPP]
+${wa.introText || 'Olá! Concluí a qualificação:'}
 
-[TEXTO_FECHAMENTO]
-${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.'}
-
-[RODAPE]
-${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
+[TEXTO_FECHAMENTO_WHATSAPP]
+${wa.outroText || 'Gostaria de dar sequência ao atendimento com o especialista.'}`;
   };
 
   const handleCopyModel = async () => {
@@ -402,7 +380,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
     }
   };
 
-  // Parser Resiliente do Modelo Estruturado (Colar e Aplicar)
+  // Parser Resiliente do Modelo (Apenas Design & Síntese da Mensagem)
   const parseModelText = (rawText) => {
     if (!rawText || !rawText.trim()) {
       throw new Error('O texto está vazio. Cole um modelo válido antes de aplicar.');
@@ -418,98 +396,65 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
       blocks[tag] = content;
     }
 
-    if (!blocks['TITULO'] && !blocks['PERGUNTAS']) {
-      throw new Error('Marcadores obrigatórios não encontrados. Certifique-se de que o texto contenha [TITULO] e [PERGUNTAS].');
+    const hasAnyValidTag = Boolean(
+      blocks['TITULO'] ||
+      blocks['SUBTITULO'] ||
+      blocks['TEXTO_ABERTURA'] ||
+      blocks['BOAS_VINDAS'] ||
+      blocks['TEXTO_BOTAO'] ||
+      blocks['BOTAO'] ||
+      blocks['RODAPE'] ||
+      blocks['WHATSAPP_DESTINO'] ||
+      blocks['WHATSAPP'] ||
+      blocks['TELEFONE'] ||
+      blocks['TEXTO_ABERTURA_WHATSAPP'] ||
+      blocks['WHATSAPP_ABERTURA'] ||
+      blocks['SINTESE_ABERTURA'] ||
+      blocks['TEXTO_FECHAMENTO_WHATSAPP'] ||
+      blocks['WHATSAPP_FECHAMENTO'] ||
+      blocks['TEXTO_FECHAMENTO'] ||
+      blocks['SINTESE_FECHAMENTO'] ||
+      blocks['COR_PRIMARIA'] ||
+      blocks['COR_FUNDO'] ||
+      blocks['COR_TEXTO']
+    );
+
+    if (!hasAnyValidTag) {
+      throw new Error('Nenhum marcador de Design ou Mensagem encontrado. Certifique-se de usar tags como [TITULO], [SUBTITULO], [WHATSAPP_DESTINO], etc.');
     }
 
-    // 1. Logomarca
-    let logoUrl = blocks['LOGOMARCA'] || '';
-    if (logoUrl.toLowerCase().includes('(opcional') || logoUrl.toLowerCase().includes('deixe em branco')) {
-      logoUrl = '';
-    }
-
-    // 2. Textos Básicos
+    // 1. Textos de Design
     const headline = blocks['TITULO'] || '';
     const subtitle = blocks['SUBTITULO'] || '';
-    const welcomeText = blocks['TEXTO_ABERTURA'] || '';
+    const welcomeText = blocks['TEXTO_ABERTURA'] || blocks['BOAS_VINDAS'] || '';
+    const buttonText = blocks['TEXTO_BOTAO'] || blocks['BOTAO'] || '';
     const footerText = blocks['RODAPE'] || '';
 
-    // 3. WhatsApp Destino
-    const rawPhone = blocks['WHATSAPP_DESTINO'] || '';
+    // 2. WhatsApp de Destino
+    const rawPhone = blocks['WHATSAPP_DESTINO'] || blocks['WHATSAPP'] || blocks['TELEFONE'] || '';
     const cleanPhone = rawPhone.replace(/\D/g, '');
 
-    // 4. Fechamento
-    const outroText = blocks['TEXTO_FECHAMENTO'] || '';
+    // 3. Cores Opcionais
+    const primaryColor = blocks['COR_PRIMARIA'] || '';
+    const backgroundColor = blocks['COR_FUNDO'] || '';
+    const textColor = blocks['COR_TEXTO'] || '';
 
-    // 5. Perguntas
-    const rawQuestions = blocks['PERGUNTAS'] || '';
-    const parsedQuestions = [];
-    if (rawQuestions) {
-      const lines = rawQuestions.split('\n').map(l => l.trim()).filter(Boolean);
-      let currentQ = null;
-
-      for (let line of lines) {
-        const isOptionLine = /^[-*•]|\([a-z0-9]\)/i.test(line);
-        const isTextPlaceholder = /^\[texto\]|^\[text\]|^\(texto\)|^\[escrever\]|^\[escrita\]|^\[caracteres\]/i.test(line);
-
-        if (isTextPlaceholder && currentQ) {
-          currentQ.type = 'short_text';
-          currentQ.options = [];
-          currentQ.placeholder = 'Digite sua resposta...';
-          continue;
-        }
-
-        if (!isOptionLine && !isTextPlaceholder) {
-          // Linha de Pergunta (remove número inicial como 1., 2), Pergunta 1: etc.)
-          const cleanTitle = line.replace(/^(\d+[\.\)]|pergunta\s*\d+:?|p\d+:?)\s*/i, '').trim();
-          if (cleanTitle) {
-            currentQ = {
-              id: 'q_' + Math.random().toString(36).substring(2, 9),
-              title: cleanTitle,
-              subtitle: '',
-              type: 'single_choice',
-              required: true,
-              options: []
-            };
-            parsedQuestions.push(currentQ);
-          }
-        } else if (isOptionLine && currentQ) {
-          let text = line.replace(/^[-*•]\s*/, '').trim();
-          let isQualified = true;
-
-          if (/\[(x|-|desqualificado|desqualificada|nao|não)\]/i.test(text)) {
-            isQualified = false;
-            text = text.replace(/\[(x|-|desqualificado|desqualificada|nao|não)\]/gi, '').trim();
-          } else if (/\[(v|\+|qualificado|qualificada|sim|ok)\]/i.test(text)) {
-            isQualified = true;
-            text = text.replace(/\[(v|\+|qualificado|qualificada|sim|ok)\]/gi, '').trim();
-          }
-
-          currentQ.options.push({
-            id: 'opt_' + Math.random().toString(36).substring(2, 7),
-            text: text,
-            isQualified: isQualified
-          });
-        }
-      }
-
-      for (let q of parsedQuestions) {
-        if (q.options.length === 0 && q.type !== 'short_text') {
-          q.type = 'short_text';
-          q.placeholder = 'Digite sua resposta...';
-        }
-      }
-    }
+    // 4. Síntese da Mensagem (WhatsApp)
+    const introText = blocks['TEXTO_ABERTURA_WHATSAPP'] || blocks['WHATSAPP_ABERTURA'] || blocks['SINTESE_ABERTURA'] || '';
+    const outroText = blocks['TEXTO_FECHAMENTO_WHATSAPP'] || blocks['WHATSAPP_FECHAMENTO'] || blocks['TEXTO_FECHAMENTO'] || blocks['SINTESE_FECHAMENTO'] || '';
 
     return {
-      logoUrl,
       headline,
       subtitle,
       welcomeText,
-      cleanPhone,
-      outroText,
+      buttonText,
       footerText,
-      parsedQuestions
+      cleanPhone,
+      primaryColor,
+      backgroundColor,
+      textColor,
+      introText,
+      outroText
     };
   };
 
@@ -525,15 +470,19 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
           ...(parsed.headline ? { headline: parsed.headline } : {}),
           ...(parsed.subtitle ? { subtitle: parsed.subtitle } : {}),
           ...(parsed.welcomeText ? { welcomeText: parsed.welcomeText } : {}),
+          ...(parsed.buttonText ? { buttonText: parsed.buttonText } : {}),
           ...(parsed.footerText ? { footerText: parsed.footerText } : {}),
           ...(parsed.cleanPhone ? { whatsappPhone: parsed.cleanPhone } : {}),
-          ...(parsed.logoUrl ? { logoUrl: parsed.logoUrl } : {})
+          ...(parsed.primaryColor ? { primaryColor: parsed.primaryColor } : {}),
+          ...(parsed.backgroundColor ? { backgroundColor: parsed.backgroundColor } : {}),
+          ...(parsed.textColor ? { textColor: parsed.textColor } : {})
         },
         whatsapp: {
           ...formData.whatsapp,
+          ...(parsed.introText ? { introText: parsed.introText } : {}),
           ...(parsed.outroText ? { outroText: parsed.outroText } : {})
-        },
-        questions: parsed.parsedQuestions.length > 0 ? parsed.parsedQuestions : formData.questions
+        }
+        // As perguntas existentes permanecem 100% preservadas e intactas!
       };
 
       setFormData(updated);
@@ -543,7 +492,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
 
       setShowPasteModal(false);
       setModelTextToPaste('');
-      setSaveMessage('Estrutura aplicada e salva com sucesso!');
+      setSaveMessage('Design e Síntese de Mensagem aplicados com sucesso!');
       setTimeout(() => setSaveMessage(''), 3500);
     } catch (err) {
       alert(err.message);
@@ -639,7 +588,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                 <div className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-[#0071E3] animate-pulse"></span>
                   <h3 className="text-xs font-bold text-[#1D1D1F] uppercase tracking-wider">
-                    Configuração Rápida & Estrutura
+                    Configuração Rápida (Design & Síntese)
                   </h3>
                 </div>
 
@@ -648,7 +597,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                     type="button"
                     onClick={handleCopyModel}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black/[0.04] hover:bg-black/[0.08] text-[#1D1D1F] text-xs font-semibold rounded-full transition-all active:scale-95 border border-black/[0.06]"
-                    title="Copiar estrutura completa em formato de texto para editar no Bloco de Notas ou ChatGPT"
+                    title="Copiar textos de Design e Síntese de Mensagem para editar"
                   >
                     {modelCopiedToast ? (
                       <>
@@ -670,7 +619,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                       setShowPasteModal(true);
                     }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0071E3] hover:bg-[#0077ED] text-white text-xs font-semibold rounded-full shadow-sm transition-all active:scale-95"
-                    title="Colar texto estruturado e preencher todo o formulário automaticamente"
+                    title="Colar textos de Design e Síntese de Mensagem e aplicar automaticamente"
                   >
                     <ClipboardPaste className="w-3.5 h-3.5" />
                     <span>Colar Modelo</span>
@@ -1611,9 +1560,9 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                   <ClipboardPaste className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[#1D1D1F]">Colar e Aplicar Modelo Completo</h3>
+                  <h3 className="text-sm font-bold text-[#1D1D1F]">Colar e Aplicar (Design & Síntese de Mensagem)</h3>
                   <p className="text-[11px] text-[#86868B]">
-                    Cole o texto com marcadores ([TITULO], [PERGUNTAS], etc.). O sistema preenche tudo automaticamente.
+                    Cole os marcadores de Design e WhatsApp. As perguntas existentes não são alteradas.
                   </p>
                 </div>
               </div>
@@ -1670,7 +1619,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                 rows={13}
                 value={modelTextToPaste}
                 onChange={(e) => setModelTextToPaste(e.target.value)}
-                placeholder={`[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[PERGUNTAS]\n1. Texto da primeira pergunta?\n- Opção A\n- Opção B\n- Opção C [x]\n\n2. Qual o seu nome e WhatsApp?\n[texto]\n\n[TEXTO_FECHAMENTO]\nMensagem final exibida ao concluir o quiz antes/junto do redirecionamento\n\n[RODAPE]\nTexto do rodapé (ex: Nome da empresa / CNPJ / Direitos reservados)`}
+                placeholder={`[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[TEXTO_BOTAO]\nIniciar\n\n[RODAPE]\n🔒 Seus dados estão seguros e protegidos pela LGPD.\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[TEXTO_ABERTURA_WHATSAPP]\nOlá! Concluí a qualificação:\n\n[TEXTO_FECHAMENTO_WHATSAPP]\nGostaria de dar sequência ao atendimento com o especialista.`}
                 className="w-full flex-1 p-3.5 bg-black/[0.03] border border-black/[0.06] rounded-2xl text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 resize-none leading-relaxed select-all"
               />
             </div>
@@ -1678,7 +1627,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
             {/* Rodapé do Modal */}
             <div className="p-4 border-t border-black/[0.06] bg-[#F5F5F7] flex items-center justify-between">
               <span className="text-[11px] text-[#86868B]">
-                Opções com <code className="bg-black/5 px-1 rounded text-rose-600 font-bold">[x]</code> desqualificam o lead automaticamente.
+                Aplica textos de Design e Mensagem do WhatsApp. Perguntas permanecem intactas.
               </span>
 
               <div className="flex items-center gap-2">
