@@ -369,10 +369,7 @@ export default function FunnelEditor({ funnelId, onBack }) {
 [texto]`;
     }
 
-    return `[LOGOMARCA]
-${d.logoUrl || '(Opcional: cole aqui a URL da imagem ou deixe em branco se já subiu no topo)'}
-
-[TITULO]
+    return `[TITULO]
 ${d.headline || 'Qualificação Estratégica'}
 
 [SUBTITULO]
@@ -453,7 +450,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
 
       for (let line of lines) {
         const isOptionLine = /^[-*•]|\([a-z0-9]\)/i.test(line);
-        const isTextPlaceholder = /^\[texto\]|^\[text\]|^\(texto\)/i.test(line);
+        const isTextPlaceholder = /^\[texto\]|^\[text\]|^\(texto\)|^\[escrever\]|^\[escrita\]|^\[caracteres\]/i.test(line);
 
         if (isTextPlaceholder && currentQ) {
           currentQ.type = 'short_text';
@@ -922,32 +919,113 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                   </div>
                 </div>
 
-                {/* Paleta Apple */}
+                {/* Paleta e Cores Personalizadas */}
                 <div className="space-y-3 pt-4 border-t border-black/[0.04]">
-                  <span className="block text-xs font-semibold text-[#1D1D1F]">Paletas Pré-definidas</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {COLOR_PRESETS.map((p) => (
-                      <button
-                        key={p.name}
-                        type="button"
-                        onClick={() => setFormData(prev => ({
-                          ...prev,
-                          design: {
-                            ...prev.design,
-                            primaryColor: p.primaryColor,
-                            backgroundColor: p.backgroundColor,
-                            textColor: p.textColor
-                          }
-                        }))}
-                        className="p-2.5 rounded-xl bg-black/[0.03] hover:bg-black/[0.06] text-left transition-all"
-                      >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.primaryColor }}></span>
-                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.backgroundColor }}></span>
-                        </div>
-                        <span className="text-[11px] font-medium text-[#1D1D1F] block truncate">{p.name}</span>
-                      </button>
-                    ))}
+                  <span className="block text-xs font-semibold text-[#1D1D1F]">Cores da Página</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Cor Primária */}
+                    <div className="p-3 rounded-2xl bg-black/[0.03] space-y-1.5">
+                      <label className="text-[11px] font-semibold text-[#1D1D1F] block">Cor Primária (Botões)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={formData.design.primaryColor || '#0071E3'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, primaryColor: e.target.value }
+                          }))}
+                          className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                        />
+                        <input
+                          type="text"
+                          value={formData.design.primaryColor || '#0071E3'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, primaryColor: e.target.value }
+                          }))}
+                          className="flex-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-white border border-black/[0.08] text-[#1D1D1F] focus:outline-none uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cor de Fundo */}
+                    <div className="p-3 rounded-2xl bg-black/[0.03] space-y-1.5">
+                      <label className="text-[11px] font-semibold text-[#1D1D1F] block">Cor de Fundo</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={formData.design.backgroundColor || '#FFFFFF'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, backgroundColor: e.target.value }
+                          }))}
+                          className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                        />
+                        <input
+                          type="text"
+                          value={formData.design.backgroundColor || '#FFFFFF'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, backgroundColor: e.target.value }
+                          }))}
+                          className="flex-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-white border border-black/[0.08] text-[#1D1D1F] focus:outline-none uppercase"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cor do Texto */}
+                    <div className="p-3 rounded-2xl bg-black/[0.03] space-y-1.5">
+                      <label className="text-[11px] font-semibold text-[#1D1D1F] block">Cor do Texto</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={formData.design.textColor || '#1D1D1F'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, textColor: e.target.value }
+                          }))}
+                          className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
+                        />
+                        <input
+                          type="text"
+                          value={formData.design.textColor || '#1D1D1F'}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            design: { ...prev.design, textColor: e.target.value }
+                          }))}
+                          className="flex-1 px-2.5 py-1 text-xs font-mono rounded-lg bg-white border border-black/[0.08] text-[#1D1D1F] focus:outline-none uppercase"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-1">
+                    <span className="block text-[11px] text-[#86868B] mb-1.5">Ou selecione uma paleta pronta:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {COLOR_PRESETS.map((p) => (
+                        <button
+                          key={p.name}
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            design: {
+                              ...prev.design,
+                              primaryColor: p.primaryColor,
+                              backgroundColor: p.backgroundColor,
+                              textColor: p.textColor
+                            }
+                          }))}
+                          className="p-2.5 rounded-xl bg-black/[0.03] hover:bg-black/[0.06] text-left transition-all"
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.primaryColor }}></span>
+                            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: p.backgroundColor }}></span>
+                          </div>
+                          <span className="text-[11px] font-medium text-[#1D1D1F] block truncate">{p.name}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -1036,9 +1114,42 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                         className="p-4 rounded-xl bg-black/[0.025] space-y-3"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-[#86868B]">
-                            Pergunta {qIdx + 1} • {q.type === 'short_text' ? 'Texto' : 'Múltipla Escolha'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-[#86868B]">
+                              Pergunta {qIdx + 1}
+                            </span>
+                            {/* Seletor Segmentado: Opções vs Texto Escrito */}
+                            <div className="flex items-center bg-black/[0.05] p-0.5 rounded-lg text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const opts = (q.options && q.options.length > 0) ? q.options : [
+                                    { id: 'opt_' + Math.random().toString(36).substring(2, 7), text: 'Opção 1', isQualified: true },
+                                    { id: 'opt_' + Math.random().toString(36).substring(2, 7), text: 'Opção 2', isQualified: false }
+                                  ];
+                                  updateQuestion(qIdx, { type: 'single_choice', options: opts });
+                                }}
+                                className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                                  q.type !== 'short_text'
+                                    ? 'bg-white text-[#1D1D1F] shadow-sm font-semibold'
+                                    : 'text-[#86868B] hover:text-[#1D1D1F]'
+                                }`}
+                              >
+                                Opções (Clique)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => updateQuestion(qIdx, { type: 'short_text', placeholder: q.placeholder || 'Digite sua resposta detalhada aqui...' })}
+                                className={`px-2 py-0.5 rounded-md font-medium transition-all ${
+                                  q.type === 'short_text'
+                                    ? 'bg-white text-[#1D1D1F] shadow-sm font-semibold'
+                                    : 'text-[#86868B] hover:text-[#1D1D1F]'
+                                }`}
+                              >
+                                Texto Escrito
+                              </button>
+                            </div>
+                          </div>
                           <button
                             type="button"
                             onClick={() => removeQuestion(qIdx)}
@@ -1065,7 +1176,22 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                           />
                         </div>
 
-                        {q.type !== 'short_text' && (
+                        {/* Campo de Resposta Escrita (se tipo short_text) */}
+                        {q.type === 'short_text' ? (
+                          <div className="p-3 bg-white/70 rounded-xl space-y-1.5 border border-black/[0.04]">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-medium text-[#1D1D1F]">Resposta Escrita pelo Lead</span>
+                              <span className="text-[10px] text-[#86868B]">Texto livre + contador de caracteres</span>
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Texto de ajuda no campo (placeholder)..."
+                              value={q.placeholder || ''}
+                              onChange={(e) => updateQuestion(qIdx, { placeholder: e.target.value })}
+                              className="w-full px-3 py-1.5 text-xs rounded-lg bg-white shadow-sm focus:outline-none text-[#1D1D1F]"
+                            />
+                          </div>
+                        ) : (
                           <div className="space-y-2 pt-1">
                             {q.options?.map((opt, optIdx) => (
                               <div key={opt.id || optIdx} className="flex items-center gap-2">
@@ -1316,37 +1442,52 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                     />
                   </div>
 
-                  {/* Toggle: Redirecionamento Automático para WhatsApp */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-black/[0.025] mt-2">
+                  {/* Seletor do Tempo de Redirecionamento */}
+                  <div className="p-4 rounded-xl bg-black/[0.025] space-y-3">
                     <div>
                       <span className="text-xs font-semibold text-[#1D1D1F] block">
-                        Redirecionamento Automático
+                        Redirecionamento ao Concluir
                       </span>
                       <p className="text-[11px] text-[#86868B] mt-0.5">
-                        {formData.whatsapp?.autoRedirect !== false
-                          ? 'O lead qualificado é enviado automaticamente ao WhatsApp após 3 segundos.'
-                          : 'O lead qualificado visualiza a tela de aprovação com o botão e clica manualmente.'}
+                        Defina o tempo antes de abrir o WhatsApp ou mantenha manual com botão.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setFormData(prev => ({
-                        ...prev,
-                        whatsapp: {
-                          ...prev.whatsapp,
-                          autoRedirect: prev.whatsapp?.autoRedirect === false ? true : false
-                        }
-                      }))}
-                      className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                        formData.whatsapp?.autoRedirect !== false ? 'bg-[#34C759]' : 'bg-black/20'
-                      }`}
-                    >
-                      <div
-                        className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          formData.whatsapp?.autoRedirect !== false ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                      {[
+                        { label: 'Instantâneo (0s)', value: 0 },
+                        { label: '2 segundos', value: 2 },
+                        { label: '3 segundos', value: 3 },
+                        { label: '5 segundos', value: 5 },
+                        { label: 'Não redirecionar', value: -1 }
+                      ].map((opt) => {
+                        const currentVal = formData.whatsapp?.redirectSeconds !== undefined
+                          ? Number(formData.whatsapp.redirectSeconds)
+                          : (formData.whatsapp?.autoRedirect === false ? -1 : 0);
+                        const isSelected = currentVal === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setFormData(prev => ({
+                              ...prev,
+                              whatsapp: {
+                                ...prev.whatsapp,
+                                redirectSeconds: opt.value,
+                                autoRedirect: opt.value !== -1
+                              }
+                            }))}
+                            className={`px-3 py-2 text-xs rounded-xl font-medium transition-all text-center border ${
+                              isSelected
+                                ? 'bg-[#0071E3] text-white border-[#0071E3] shadow-sm font-semibold'
+                                : 'bg-white text-[#1D1D1F] border-black/[0.08] hover:border-black/20'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1529,7 +1670,7 @@ ${d.footerText || '🔒 Seus dados estão seguros e protegidos pela LGPD.'}`;
                 rows={13}
                 value={modelTextToPaste}
                 onChange={(e) => setModelTextToPaste(e.target.value)}
-                placeholder={`[LOGOMARCA]\n(Opcional: cole aqui a URL da imagem ou deixe em branco se já subiu no topo)\n\n[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[PERGUNTAS]\n1. Texto da primeira pergunta?\n- Opção A\n- Opção B\n- Opção C [x]\n\n2. Qual o seu nome e WhatsApp?\n[texto]\n\n[TEXTO_FECHAMENTO]\nMensagem final exibida ao concluir o quiz antes/junto do redirecionamento\n\n[RODAPE]\nTexto do rodapé (ex: Nome da empresa / CNPJ / Direitos reservados)`}
+                placeholder={`[TITULO]\nTítulo principal da página/quiz\n\n[SUBTITULO]\nSubtítulo explicativo\n\n[TEXTO_ABERTURA]\nTexto de boas-vindas / tela inicial antes das perguntas\n\n[WHATSAPP_DESTINO]\n5588999999999\n\n[PERGUNTAS]\n1. Texto da primeira pergunta?\n- Opção A\n- Opção B\n- Opção C [x]\n\n2. Qual o seu nome e WhatsApp?\n[texto]\n\n[TEXTO_FECHAMENTO]\nMensagem final exibida ao concluir o quiz antes/junto do redirecionamento\n\n[RODAPE]\nTexto do rodapé (ex: Nome da empresa / CNPJ / Direitos reservados)`}
                 className="w-full flex-1 p-3.5 bg-black/[0.03] border border-black/[0.06] rounded-2xl text-xs font-mono text-[#1D1D1F] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#0071E3]/20 resize-none leading-relaxed select-all"
               />
             </div>

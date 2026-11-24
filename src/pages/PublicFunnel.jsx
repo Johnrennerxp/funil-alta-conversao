@@ -26,6 +26,8 @@ export default function PublicFunnel() {
   const [textInput, setTextInput] = useState('');
   const [redirectUrl, setRedirectUrl] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
+  const [countdown, setCountdown] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     loadFunnelData();
@@ -67,25 +69,38 @@ export default function PublicFunnel() {
     }
   };
 
+  // Gerenciador de redirecionamento configurável (Instantâneo 0s, contagem regressiva ou manual)
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Enter' && currentStep > 0 && currentStep <= (funnel?.questions?.length || 0)) {
-        const q = funnel.questions[currentStep - 1];
-        if (q.type === 'short_text') {
-          handleTextSubmit();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, textInput, funnel]);
+    if (currentStep !== 999 || !redirectUrl || redirectUrl === '#' || isSubmitting) return;
 
-  useEffect(() => {
-    const isAutoRedirect = funnel?.whatsapp?.autoRedirect !== false;
-    if (currentStep === 999 && redirectUrl && isAutoRedirect) {
-      window.location.href = redirectUrl;
+    const delay = funnel?.whatsapp?.redirectSeconds !== undefined
+      ? Number(funnel.whatsapp.redirectSeconds)
+      : (funnel?.whatsapp?.autoRedirect === false ? -1 : 0);
+
+    if (delay === -1) {
+      setCountdown(null);
+      return;
     }
-  }, [currentStep, redirectUrl, funnel]);
+
+    if (delay === 0) {
+      window.location.href = redirectUrl;
+      return;
+    }
+
+    setCountdown(delay);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          window.location.href = redirectUrl;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [currentStep, redirectUrl, funnel, isSubmitting]);
 
   // Bloqueio rigoroso de retorno pelo botão voltar do navegador ao ser desqualificado
   useEffect(() => {
@@ -241,6 +256,7 @@ export default function PublicFunnel() {
   };
 
   const finalizePositiveQualification = async (finalAnswers) => {
+    setIsSubmitting(true);
     setCurrentStep(999);
     const trackingParams = getTrackingParams();
 
@@ -253,22 +269,24 @@ export default function PublicFunnel() {
           origin: { y: 0.6 }
         });
       }).catch(() => {});
-    } catch {
-      // Ignora erro de confetti
-    }
+    } catch {}
 
     logAnalyticsEvent(funnel.id, 'qualified', {
       answers: Object.values(finalAnswers),
       ...trackingParams
     });
 
-    // Salva na lista de respostas (Planilha)
-    saveFormSubmission(funnel.id, {
-      formTitle: design.headline,
-      status: 'qualified',
-      answers: Object.values(finalAnswers),
-      tracking: trackingParams
-    });
+    // Salva na lista de respostas (Firestore) com await para garantir a gravação antes de redirecionar
+    try {
+      await saveFormSubmission(funnel.id, {
+        formTitle: design.headline,
+        status: 'qualified',
+        answers: Object.values(finalAnswers),
+        tracking: trackingParams
+      });
+    } catch (e) {
+      console.warn('[Firestore] Erro ao gravar submissão:', e);
+    }
 
     if (tracking.pixelId) {
       trackPixelLead(tracking.pixelId, {
@@ -286,10 +304,14 @@ export default function PublicFunnel() {
     });
     const waUrl = buildWhatsAppUrl({ phone: design.whatsappPhone, message });
     setRedirectUrl(waUrl);
+    setIsSubmitting(false);
 
-    // Redirecionamento 100% instantâneo e automático ao WhatsApp
-    const isAutoRedirect = funnel?.whatsapp?.autoRedirect !== false;
-    if (isAutoRedirect && waUrl && waUrl !== '#') {
+    // Redirecionamento instantâneo se configurado como 0 segundos
+    const delay = funnel?.whatsapp?.redirectSeconds !== undefined
+      ? Number(funnel.whatsapp.redirectSeconds)
+      : (funnel?.whatsapp?.autoRedirect === false ? -1 : 0);
+
+    if (delay === 0 && waUrl && waUrl !== '#') {
       window.location.href = waUrl;
     }
 
@@ -495,19 +517,32 @@ export default function PublicFunnel() {
               </div>
             )}
 
-            {/* Texto Livre */}
-            {currentQuestion.type === 'short_text' && (
+            {/* Resposta Escrita / Caracteres */}
+            {(currentQuestion.type === 'short_text' || currentQuestion.type === 'long_text') && (
               <form onSubmit={handleTextSubmit} className="space-y-3 pt-1">
-                <input
-                  type="text"
-                  autoFocus
-                  placeholder={currentQuestion.placeholder || 'Digite sua resposta...'}
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  className={`w-full rounded-2xl px-5 py-4 text-sm sm:text-base focus:outline-none transition-all ${
-                    isDark ? 'bg-white/10 text-white placeholder:text-white/40' : 'bg-black/[0.04] text-[#1D1D1F] placeholder:text-black/40'
-                  }`}
-                />
+                <div className="space-y-1.5">
+                  <textarea
+                    rows={3}
+                    autoFocus
+                    placeholder={currentQuestion.placeholder || 'Digite sua resposta detalhada aqui...'}
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleTextSubmit(e);
+                      }
+                    }}
+                    className={`w-full rounded-2xl px-5 py-4 text-sm sm:text-base focus:outline-none transition-all resize-none ${
+                      isDark ? 'bg-white/10 text-white placeholder:text-white/40' : 'bg-black/[0.04] text-[#1D1D1F] placeholder:text-black/40'
+                    }`}
+                  />
+                  <div className="flex items-center justify-between px-2 text-[11px] opacity-40 font-mono">
+                    <span>Enter para avançar</span>
+                    <span>{textInput.length} caracteres</span>
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   disabled={!textInput.trim() && currentQuestion.required}
@@ -569,39 +604,40 @@ export default function PublicFunnel() {
 
             <div className="space-y-1.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-                Perfil Aprovado
+                Aprovado
               </span>
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
                 Tudo pronto para o seu atendimento
               </h2>
               <p className="text-xs sm:text-sm opacity-70 max-w-sm mx-auto leading-relaxed">
-                {funnel?.whatsapp?.autoRedirect !== false ? (
-                  'Redirecionando instantaneamente para o WhatsApp...'
-                ) : (
-                  'Clique no botão abaixo para iniciar seu atendimento exclusivo no WhatsApp.'
-                )}
+                Suas respostas foram salvas com sucesso.
               </p>
             </div>
 
             <div className="pt-2 space-y-3">
-              {/* Aviso Rápido e Direto de Envio no WhatsApp */}
-              <div className="max-w-sm mx-auto py-2.5 px-4 rounded-2xl bg-emerald-500/10 text-emerald-800 text-xs font-semibold border border-emerald-500/25 flex items-center justify-center gap-2 animate-pulse">
-                <span>📲 Ao entrar no WhatsApp, clique em "Enviar" para iniciar o atendimento!</span>
+              {/* Contador de Redirecionamento se configurado com segundos */}
+              {countdown !== null && countdown > 0 && (
+                <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-emerald-500/10 text-emerald-800 text-xs font-semibold animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>Redirecionando em {countdown} segundo{countdown > 1 ? 's' : ''}...</span>
+                </div>
+              )}
+
+              <div>
+                <a
+                  href={redirectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto min-w-[260px] py-3.5 px-8 rounded-full font-semibold text-sm tracking-wide shadow-sm hover:shadow transition-all duration-200 active:scale-95 inline-flex items-center justify-center gap-2 text-white"
+                  style={{ backgroundColor: '#25D366' }}
+                >
+                  <MessageCircle className="w-4 h-4 fill-current" />
+                  <span>{design.buttonText || 'Abrir WhatsApp Agora'}</span>
+                </a>
               </div>
 
-              <a
-                href={redirectUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto min-w-[260px] py-3.5 px-8 rounded-full font-semibold text-sm tracking-wide shadow-sm hover:shadow transition-all duration-200 active:scale-95 inline-flex items-center justify-center gap-2 text-white"
-                style={{ backgroundColor: '#25D366' }}
-              >
-                <MessageCircle className="w-4 h-4 fill-current" />
-                <span>{design.buttonText || 'Abrir WhatsApp Agora'}</span>
-              </a>
-
               <p className="text-[11px] opacity-40">
-                Suas respostas foram estruturadas automaticamente.
+                Ao entrar no WhatsApp, basta clicar em Enviar.
               </p>
             </div>
           </div>

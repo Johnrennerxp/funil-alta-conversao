@@ -5,7 +5,12 @@
 
 export function sanitizePhone(rawPhone) {
   if (!rawPhone) return '';
-  return rawPhone.replace(/\D/g, '');
+  let clean = rawPhone.replace(/\D/g, '');
+  // Garante DDI 55 para números do Brasil com DDD (10 ou 11 dígitos)
+  if (clean.length === 10 || clean.length === 11) {
+    clean = '55' + clean;
+  }
+  return clean;
 }
 
 export function buildWhatsAppMessage({

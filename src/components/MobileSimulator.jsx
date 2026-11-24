@@ -29,7 +29,10 @@ export default function MobileSimulator({ funnel }) {
   }
 
   const { design = {}, questions = [], disqualification = {}, whatsapp = {} } = funnel;
-  const isAutoRedirect = whatsapp.autoRedirect !== false;
+  const redirectSeconds = whatsapp?.redirectSeconds !== undefined
+    ? Number(whatsapp.redirectSeconds)
+    : (whatsapp?.autoRedirect === false ? -1 : 0);
+  const isAutoRedirect = redirectSeconds !== -1;
   const totalQuestions = questions.length;
   const currentQIndex = currentStep - 1;
   const currentQuestion = questions[currentQIndex];
@@ -40,7 +43,11 @@ export default function MobileSimulator({ funnel }) {
 
   useEffect(() => {
     if (currentStep === 999 && isAutoRedirect) {
-      setCountdown(3);
+      if (redirectSeconds === 0) {
+        setCountdown(0);
+        return;
+      }
+      setCountdown(redirectSeconds);
       const timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
@@ -52,7 +59,7 @@ export default function MobileSimulator({ funnel }) {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [currentStep, isAutoRedirect]);
+  }, [currentStep, isAutoRedirect, redirectSeconds]);
 
   const handleStart = () => {
     if (questions.length > 0) {
@@ -393,19 +400,29 @@ export default function MobileSimulator({ funnel }) {
                   </div>
                 )}
 
-                {/* Campo de Texto */}
+                {/* Campo de Texto Escrito */}
                 {currentQuestion.type === 'short_text' && (
                   <form onSubmit={handleTextSubmit} className="space-y-2.5 pt-1">
-                    <input
-                      type="text"
+                    <textarea
+                      rows={3}
                       autoFocus
-                      placeholder={currentQuestion.placeholder || 'Sua resposta...'}
+                      placeholder={currentQuestion.placeholder || 'Digite sua resposta detalhada aqui...'}
                       value={textInput}
                       onChange={(e) => setTextInput(e.target.value)}
-                      className={`w-full rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:outline-none transition-all ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleTextSubmit(e);
+                        }
+                      }}
+                      className={`w-full rounded-xl px-3.5 py-2.5 text-xs sm:text-sm focus:outline-none transition-all resize-none ${
                         isDark ? 'bg-white/10 text-white placeholder:text-white/40' : 'bg-black/[0.04] text-[#1D1D1F] placeholder:text-black/40'
                       }`}
                     />
+                    <div className="flex items-center justify-between text-[10px] opacity-50 px-1">
+                      <span>{textInput.length} caracteres</span>
+                      <span>Enter ↵ envia</span>
+                    </div>
                     <button
                       type="submit"
                       disabled={!textInput.trim() && currentQuestion.required}
@@ -468,14 +485,12 @@ export default function MobileSimulator({ funnel }) {
                 <div>
                   <h3 className="text-sm sm:text-base font-bold">Perfil Aprovado!</h3>
                   <p className="text-xs opacity-75 mt-1 leading-relaxed">
-                    {isAutoRedirect
+                    {redirectSeconds === 0
                       ? 'Redirecionando instantaneamente para o WhatsApp...'
-                      : 'Clique no botão abaixo para iniciar o atendimento no WhatsApp.'}
+                      : redirectSeconds > 0
+                        ? `Redirecionando em ${countdown}s para o WhatsApp...`
+                        : 'Clique no botão abaixo para iniciar o atendimento no WhatsApp.'}
                   </p>
-                </div>
-
-                <div className="py-1.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-800 text-[10px] font-semibold text-center border border-emerald-500/20">
-                  📲 Ao entrar no WhatsApp, clique em "Enviar" para iniciar o atendimento!
                 </div>
 
                 <a
@@ -489,9 +504,9 @@ export default function MobileSimulator({ funnel }) {
                   <span>{design.buttonText || 'Abrir WhatsApp'}</span>
                 </a>
 
-                {isAutoRedirect && (
+                {redirectSeconds >= 0 && (
                   <p className="text-[10px] text-emerald-600 font-medium">
-                    ⚡ Redirecionamento automático ativado
+                    {redirectSeconds === 0 ? '⚡ Redirecionamento instantâneo' : `⏱️ Redirecionando em ${redirectSeconds}s`}
                   </p>
                 )}
               </div>
